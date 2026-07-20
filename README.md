@@ -1,5 +1,6 @@
 # Marquee
-
+<img width="2462" height="1440" alt="image" src="https://github.com/user-attachments/assets/bcd85129-5aac-43fd-b6eb-d0fba2914784" />
+<img width="1910" height="1038" alt="image" src="https://github.com/user-attachments/assets/ab27c4cc-ec1c-41a8-bf24-d55b1eaf812d" />
 A now-playing overlay plugin for [FeedBack](https://github.com/got-feedback/feedback), designed as an OBS Browser Source. It shows album art, song title/artist, tuning, year, arrangement, live score, and song progress, and stays in sync in real time as you play — fully positioned and styled through an in-app visual editor, not hand-edited CSS.
 
 ## Features
@@ -36,6 +37,7 @@ For plugin development without touching a real FeedBack install, FeedBack suppor
 - **"Previous score" is currently disabled** — the underlying FeedBack stats it reads from are expected to change; re-enabling it is a planned follow-up rather than something currently broken.
 - **Year** comes from library metadata (`GET /api/song/{filename}`), not the live song payload — it renders blank if that lookup has nothing for a given track.
 - **"Path"** shows the arrangement's name (e.g. "Lead Guitar"), not a filesystem path.
+
 
 ## License
 
