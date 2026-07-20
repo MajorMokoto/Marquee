@@ -1,0 +1,15 @@
+{
+  "id": "marquee",
+  "name": "Marquee",
+  "version": "0.1.0",
+  "bundled": false,
+  "private": false,
+  "script": "screen.js",
+  "settings": { "html": "settings.html" },
+  "routes": "routes.py",
+  "nav": { "label": "Marquee", "screen": "marquee" },
+  "screen": "screen.html",
+  "fullscreen": true,
+  "category": "stream",
+  "description": "OBS overlay for now-playing info — song/artist, tuning, score, art, and progress, freely positioned and styled to match your stream."
+}

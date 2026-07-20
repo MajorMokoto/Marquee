@@ -1,0 +1,88 @@
+<div class="space-y-6 py-2">
+    <div class="bg-dark-900/50 p-3 rounded-xl border border-gray-800/50">
+        <h3 class="text-sm font-medium text-gray-200 mb-1">Configure how it looks</h3>
+        <p class="text-[11px] text-gray-500 mb-3">In the Marquee Editor you can set the position of the song elements to your preferences. There are included presets for most common stream setups. This plugin is ideal for streamers who want to display the current song information on their stream.</p>
+        <button onclick="window._marqueeOpenScreen()"
+                class="px-3 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90">Open Marquee Editor</button>
+    </div>
+
+    <div class="bg-dark-900/50 p-3 rounded-xl border border-gray-800/50">
+        <h3 class="text-sm font-medium text-gray-200 mb-1">OBS Browser Source URL</h3>
+        <p class="text-[11px] text-gray-500 mb-3">To use Marquee, add a Browser Source in OBS. Use the URL below. In OBS Browser Source for Marquee set the Width/Height to match the Width/Height you set in the Marquee editor. This will give you a perfect 1 to 1 marquee image in OBS.</p>
+        <div class="flex items-center gap-2">
+            <input id="marquee-url" type="text" readonly
+                   class="flex-1 bg-dark-800 border-none rounded-lg px-3 py-2 text-xs text-white font-mono outline-none">
+            <button onclick="window._marqueeCopyUrl()"
+                    class="px-3 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90">Copy</button>
+        </div>
+        <p id="marquee-copied" class="text-[11px] text-accent mt-2" style="visibility:hidden;">Copied.</p>
+        <p id="marquee-canvas-size" class="text-[11px] text-gray-500 mt-2"></p>
+    </div>
+
+    <div class="bg-dark-900/50 p-3 rounded-xl border border-gray-800/50">
+        <h3 class="text-sm font-medium text-gray-200 mb-1">Live status</h3>
+        <p id="marquee-status" class="text-[11px] text-gray-500">Checking…</p>
+        <p id="marquee-song" class="text-[11px] text-gray-500 mt-1"></p>
+    </div>
+
+</div>
+
+<script>
+(function () {
+    const PLUGIN_ID = 'marquee';
+    const urlInput = document.getElementById('marquee-url');
+    if (urlInput) urlInput.value = location.origin + `/api/plugins/${PLUGIN_ID}/render`;
+
+    // The plugin's registered nav screen is NOT addressable by the "marquee"
+    // string from plugin.json's nav.screen field — the host mounts it in the
+    // DOM as #plugin-<manifest id> (see static/v3/plugins-page.js's own
+    // openPluginSettings(): `window.showScreen('plugin-' + tgt.id)`).
+    // showScreen(id) does `document.getElementById(id).classList.add('active')`
+    // straight after clearing .active from every screen — passing a wrong id
+    // throws mid-function and leaves NOTHING active, i.e. a blank page.
+    // Matching the host's own guard (only navigate if it's actually mounted;
+    // plugin screens mount asynchronously after load).
+    window._marqueeOpenScreen = function () {
+        const screenId = 'plugin-' + PLUGIN_ID;
+        if (window.showScreen && document.getElementById(screenId)) {
+            window.showScreen(screenId);
+        } else {
+            alert('The Marquee screen is still loading — try again in a moment, or use the Plugins menu.');
+        }
+    };
+
+    window._marqueeCopyUrl = function () {
+        if (!urlInput) return;
+        urlInput.select();
+        navigator.clipboard.writeText(urlInput.value).then(() => {
+            const note = document.getElementById('marquee-copied');
+            if (!note) return;
+            note.style.visibility = 'visible';
+            setTimeout(() => { note.style.visibility = 'hidden'; }, 1500);
+        }).catch(() => {});
+    };
+
+    function poll() {
+        fetch(`/api/plugins/${PLUGIN_ID}/state`).then((r) => r.json()).then((state) => {
+            const statusEl = document.getElementById('marquee-status');
+            const songEl = document.getElementById('marquee-song');
+            const sizeEl = document.getElementById('marquee-canvas-size');
+            if (!statusEl) return;
+            const age = state.updatedAt ? (Date.now() / 1000 - state.updatedAt) : null;
+            statusEl.textContent = state.song ? 'Receiving live data.' : 'Waiting for a song to start playing.';
+            if (songEl) songEl.textContent = state.song ? `${state.song.title} — ${state.song.artist}` : '';
+            const v = state.layout && state.layout.visuals;
+            if (sizeEl) {
+                sizeEl.textContent = (v && v.stageWidth && v.stageHeight)
+                    ? `Current Marquee canvas size: ${v.stageWidth} x ${v.stageHeight}`
+                    : '';
+            }
+        }).catch(() => {
+            const statusEl = document.getElementById('marquee-status');
+            if (statusEl) statusEl.textContent = 'Could not reach the plugin backend.';
+        });
+    }
+    poll();
+    setInterval(poll, 3000);
+})();
+</script>

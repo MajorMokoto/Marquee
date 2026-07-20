@@ -1,0 +1,47 @@
+<div class="h-screen w-full pt-16 overflow-hidden" style="background:#16110d;">
+    <iframe id="marqueeEditorFrame" src="/api/plugins/marquee/editor" title="Marquee Editor"
+            style="width:100%; height:100%; border:0; display:block;"></iframe>
+</div>
+<script>
+(function () {
+    // FeedBack's showScreen() (host source: static/js/session.js) only ever
+    // toggles a `.active` CSS class between screens — it never destroys or
+    // recreates a screen's DOM. Since this iframe is created once and then
+    // just shown/hidden, its content (editor.html) was only ever fetched
+    // ONE time per FeedBack launch: navigating away and back never re-ran
+    // anything, so a stuck-forever test timer (once startTestTimer() hits
+    // its end it just stops, per that function's own clearInterval) stayed
+    // stuck for the rest of the session — and, more broadly, ANY change to
+    // editor.html's own code needed a full quit-and-relaunch of FeedBack to
+    // ever actually run, not just leaving and re-opening this screen.
+    //
+    // Fixed generally, not just for the timer: watch this screen's own
+    // container for the moment it becomes .active again, and force the
+    // iframe to reload at that exact point — the same effect as a real
+    // browser tab re-fetching a page, applied to a host that otherwise
+    // never gives us that for free.
+    const screenEl = document.getElementById('plugin-marquee');
+    const iframe = document.getElementById('marqueeEditorFrame');
+    if (!screenEl || !iframe) return;
+
+    const baseSrc = '/api/plugins/marquee/editor';
+    let wasActive = screenEl.classList.contains('active');
+    console.log('Marquee: screen.html reload-watcher installed, initial active =', wasActive);
+    const observer = new MutationObserver(() => {
+        const isActive = screenEl.classList.contains('active');
+        if (isActive && !wasActive) {
+            // Cache-busting query param, not a bare re-assignment of the
+            // same src — reassigning an iframe's src to the EXACT same
+            // URL string risks the browser treating it as a no-op (or
+            // serving a cached response) instead of a genuine fresh
+            // navigation, which would silently defeat this whole fix.
+            // A different URL every time guarantees a real fetch.
+            const fresh = baseSrc + '?t=' + Date.now();
+            console.log('Marquee: screen reactivated — reloading editor iframe:', fresh);
+            iframe.src = fresh;
+        }
+        wasActive = isActive;
+    });
+    observer.observe(screenEl, { attributes: true, attributeFilter: ['class'] });
+})();
+</script>

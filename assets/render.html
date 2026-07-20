@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Marquee — Overlay Output</title>
+<style>
+  /* Layout/visuals CSS started as a copy of the original static render page
+     but has since diverged (stage border made inset, backdrop-filter removed,
+     confetti-canvas + fade rules added) — see the comments on those rules below
+     for why. This page differs from that source both in content delivery
+     (live WS push vs. baked-in text) and in these CSS fixes. */
+  :root {
+    font-size: 18px;
+    --void: #16110d;
+    --void-2: #1d1712;
+    --curtain: #3a1518;
+    --gold: #e8a33d;
+    --bulb-hot: #ffd37a;
+    --paper: #f3e9d8;
+    --paper-dim: #b8a88c;
+
+    --accent: #ff8200;
+    --accent-rgb: 255 130 0;
+    --chip-rgb: 0 0 0;
+    --chip-alpha: 0;
+    --canvas-bg-rgb: 0 0 0;
+    --canvas-bg-alpha: 0;
+    --element-head-size: 10px;
+    --border-width: 1px;
+    --edge-rounding: 0px;
+    --content-width: min(1200px, 94vw);
+    --stage-w-px: 520px;
+    --stage-ratio: 520 / 200;
+
+    --font-display: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+    --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Consolas', 'SFMono-Regular', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--void);
+    color: var(--paper);
+    font-family: var(--font-body);
+    padding: clamp(20px, 4vw, 56px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .stage {
+    position: relative;
+    width: min(var(--stage-w-px), 94vw);
+    aspect-ratio: var(--stage-ratio);
+    border-radius: var(--edge-rounding);
+    overflow: hidden;
+    background: transparent;
+    /* The border ring is `inset`, not a plain spread — a plain
+       `0 0 0 var(--border-width) var(--accent)` shadow draws OUTSIDE the
+       element's edges, which needs extra space beyond the box's own
+       bounds to be visible. That space exists in the editor's own canvas
+       (it sits inside page padding there), but not here: this stage is
+       deliberately sized to 100vw/100vh below, to exactly match the OBS
+       Browser Source dimensions with nothing outside it — so an
+       outside-drawn shadow has nowhere to render and gets clipped away
+       entirely. Reported live: the top edge in particular had no border
+       at all. `inset` draws the same ring just inside the box's own
+       edges instead, needing no space beyond what the stage already has.
+       The drop shadow (the OTHER value here) has this exact same problem
+       and is NOT inset — it's realistically non-functional in a real OBS
+       output for the same reason, left as-is since it wasn't reported and
+       removing it wasn't asked for. */
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8), inset 0 0 0 var(--border-width) var(--accent);
+    /* Whole-overlay fade, driven by JS toggling .stage-visible based on
+       state.song (or an active editor preview) — see updateVisibility()
+       below. Starts invisible: nothing should show before we've heard
+       from the backend at all, matching "invisible when no song is
+       playing" as the default rather than a brief flash of the last
+       static build's placeholder-ish look. --fade-seconds comes from
+       visuals.fadeSeconds (editor-configurable, default 5s). */
+    opacity: 0;
+    transition: opacity var(--fade-seconds, 5s) ease;
+  }
+  .stage.stage-visible { opacity: 1; }
+  .stage-canvas-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-color: rgb(var(--canvas-bg-rgb) / var(--canvas-bg-alpha));
+  }
+
+  .obj {
+    position: absolute;
+    background: rgb(var(--chip-rgb) / var(--chip-alpha));
+    border-width: var(--border-width);
+    border-style: solid;
+    border-color: rgb(var(--accent-rgb) / 0.5);
+    border-radius:
+      calc(var(--edge-rounding) * var(--corner-tl, 0))
+      calc(var(--edge-rounding) * var(--corner-tr, 0))
+      calc(var(--edge-rounding) * var(--corner-br, 0))
+      calc(var(--edge-rounding) * var(--corner-bl, 0));
+    box-shadow: 0 10px 24px -12px rgba(0, 0, 0, calc(var(--chip-alpha) * 0.75));
+    /* No backdrop-filter here, unlike the editor's own canvas copy of this
+       rule — deliberately removed.
+       Two problems, one fix: (1) it can't do anything useful in a real OBS
+       Browser Source anyway — backdrop-filter blurs whatever's already
+       rendered on the SAME page behind the element, and in the actual
+       output there's nothing there (the real video feed is composited by
+       OBS afterward, outside the browser's own render); the frosted-glass
+       look only ever showed in the editor because the checkerboard/canvas
+       preview IS on-page content to blur. (2) reported live: with it
+       present, OBS's Browser Source (CEF, a different rendering path than
+       FeedBack's own Electron window) rendered the ENTIRE element
+       invisible — not just un-blurred, the background color the plain
+       `background` property above sets vanished too — while the
+       equivalent `.stage-canvas-bg` background-color (no backdrop-filter
+       on that element) composited correctly. Matches a known category of
+       CEF/backdrop-filter compositing bug. */
+    padding: 1px;
+    transform-origin: top left;
+    font-family: var(--font-display);
+    font-size: 16px;
+  }
+
+  .obj-art { width: 84px; height: 84px; padding: 1px; }
+  .obj-art .art-img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    -webkit-user-drag: none;
+    user-drag: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .obj-art .art-img.loaded { opacity: 1; }
+  .obj-art .art-frame-line { position: absolute; inset: 4px; border: 1px solid rgba(243, 233, 216, 0.25); pointer-events: none; }
+
+  .obj-info { width: max-content; }
+  .title {
+    margin: 0 0 3px; font-weight: 900;
+    font-size: 1.2em; line-height: 1.15; color: var(--paper); letter-spacing: -0.01em;
+  }
+  .artist { margin: 0; font-size: 0.84em; color: var(--paper-dim); font-weight: 600; }
+
+  .obj-label { width: max-content; }
+  .eyebrow-standalone {
+    font-size: 0.62em; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .ticker { display: block; overflow: hidden; }
+  .ticker-track { display: inline-block; white-space: nowrap; }
+  .ticker.is-overflowing .ticker-track {
+    animation-name: ticker-bounce;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+  }
+  @keyframes ticker-bounce {
+    0%, 12%  { transform: translateX(0); }
+    50%      { transform: translateX(var(--ticker-shift, 0)); }
+    62%, 100% { transform: translateX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ticker.is-overflowing .ticker-track { animation: none; }
+  }
+
+  .obj-stat { width: max-content; }
+  .stat-label { display: block; width: max-content; font-size: var(--element-head-size, 10px); letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; white-space: nowrap; }
+  .stat-value {
+    display: block;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 0.98em;
+    color: var(--paper);
+  }
+
+  .stat-value-percent {
+    display: block;
+    font-variant-numeric: tabular-nums;
+    font-weight: 900;
+    font-size: 1.65em;
+    line-height: 1.05;
+    color: var(--accent);
+  }
+  .stat-value-prev {
+    /* Disabled per request (2026-07-20), alongside the val-prev JS below
+       — not working correctly, and the underlying FeedBack stats/scoring
+       code this depends on is expected to be reworked soon. Revert to
+       `display: block;` (and re-enable the two commented lines in
+       applyLiveState's score block) to bring it back. */
+    display: none;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 0.7em;
+    color: var(--paper-dim);
+    margin-top: 2px;
+  }
+
+  .obj-progress { width: 240px; display: flex; align-items: center; gap: 8px; }
+  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; }
+  .progress-track { flex: 1; height: 3px; background: rgba(243, 233, 216, 0.14); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--bulb-hot)); transition: width 0.2s linear; }
+
+  .obj-custom { width: max-content; }
+  .custom-text { display: block; font-size: 0.9em; font-weight: 600; color: var(--paper); }
+
+  /* Same rule as the editor's own canvas — above every element's own
+     z-index range, pointer-events:none so it's purely visual. Confetti
+     never existed in the OBS-facing output before this — the original
+     static render page this file's CSS/structure started as a copy of
+     (see this file's own header comment for how it's since diverged)
+     never had it either; it was editor-preview-only. */
+  .confetti-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10000;
+    /* OBS's Browser Source renders via CEF's off-screen rendering (OSR)
+       mode, which is documented to sometimes miss repaints that are
+       canvas-only (a rAF loop with no accompanying DOM/text mutation) —
+       live-verified this round: the exact same event/canvas pipeline
+       renders correctly in a real Chrome tab hitting this same render
+       URL (screenshot-confirmed), so the code isn't the problem; this is
+       a known OSR limitation. Forcing the canvas onto its own GPU
+       compositing layer is the standard workaround — it nudges Chromium
+       to track it as an independent paint target instead of relying on
+       OSR's dirty-rect diffing to notice canvas-internal changes. */
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
+  .bold-active .title,
+  .bold-active .artist,
+  .bold-active .eyebrow-standalone,
+  .bold-active .stat-label,
+  .bold-active .stat-value,
+  .bold-active .stat-value-percent,
+  .bold-active .stat-value-prev,
+  .bold-active .time,
+  .bold-active .custom-text {
+    font-weight: 900 !important;
+    font-synthesis: weight !important;
+    -webkit-text-stroke: 0.5px currentColor;
+    paint-order: stroke fill;
+  }
+
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+  body { display: block; background: transparent; }
+  .stage { width: 100vw; height: 100vh; }
+
+  /* Connection-lost indicator — invisible in normal operation; a small dot
+     so a streamer glancing at their preview can tell live data stalled
+     instead of silently freezing on the last-known values. */
+  #conn-dot {
+    position: fixed; top: 6px; left: 6px; width: 8px; height: 8px; border-radius: 50%;
+    background: #e0453c; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+  }
+  #conn-dot.stale { opacity: 0.9; }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <!-- Reported live: "nothing should be visible at all" when the overlay
+       fades out — this was previously a SIBLING of .stage, not a child,
+       so it never faded with everything else (CSS opacity on an ancestor
+       DOES apply to descendants even when they're position:fixed like
+       this one — only its on-screen coordinates stay viewport-relative,
+       not whether it's covered by an ancestor's opacity). Moved inside so
+       it's covered by the exact same fade as everything else. -->
+  <div id="conn-dot" aria-hidden="true"></div>
+  <div class="stage-canvas-bg" aria-hidden="true"></div>
+
+  <div class="obj obj-art" id="obj-art" data-id="art">
+    <img class="art-img" id="art-img" alt="Album art" draggable="false" />
+    <span class="art-frame-line" aria-hidden="true"></span>
+  </div>
+
+  <div class="obj obj-stat" id="obj-path" data-id="path">
+    <span class="stat-label">Path</span>
+    <span class="stat-value"><span class="ticker"><span class="ticker-track" id="val-path">—</span></span></span>
+  </div>
+
+  <div class="obj obj-label" id="obj-nowplaying" data-id="nowplaying">
+    <span class="eyebrow-standalone">Now Playing</span>
+  </div>
+
+  <div class="obj obj-info" id="obj-info" data-id="info">
+    <h2 class="title"><span class="ticker"><span class="ticker-track" id="val-title">—</span></span></h2>
+    <p class="artist"><span class="ticker"><span class="ticker-track" id="val-artist">—</span></span></p>
+  </div>
+
+  <div class="obj obj-stat" id="obj-tuning" data-id="tuning">
+    <span class="stat-label">Tuning</span>
+    <span class="stat-value"><span class="ticker"><span class="ticker-track" id="val-tuning">—</span></span></span>
+  </div>
+
+  <div class="obj obj-stat" id="obj-year" data-id="year">
+    <span class="stat-label">Year</span>
+    <span class="stat-value"><span class="ticker"><span class="ticker-track" id="val-year">—</span></span></span>
+  </div>
+
+  <div class="obj obj-stat" id="obj-score" data-id="score">
+    <span class="stat-label">Score</span>
+    <span class="stat-value-percent"><span class="ticker"><span class="ticker-track" id="val-score">—</span></span></span>
+    <span class="stat-value-prev"><span class="ticker"><span class="ticker-track" id="val-prev">&nbsp;</span></span></span>
+  </div>
+
+  <div class="obj obj-progress" id="obj-progress" data-id="progress">
+    <span class="time"><span class="ticker"><span class="ticker-track" id="val-time-elapsed">0:00</span></span></span>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <span class="time"><span class="ticker"><span class="ticker-track" id="val-time-duration">0:00</span></span></span>
+  </div>
+
+  <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas>
+</div>
+
+<script>
+  // ---- LAYOUT_DATA: position/size/visuals only — paste an export from the
+  // editor over this object to change where things sit. CONTENT (song
+  // title, score, ...) is never part of
+  // this object here — that's supplied live over WebSocket. Currently
+  // baked in: the Standard preset's defaults.
+  //
+  // IMPORTANT — set OBS's Browser Source Width/Height to EXACTLY match
+  // visuals.stageWidth/stageHeight below (520x200 for this default).
+  const LAYOUT_DATA = {
+    version: 1,
+    order: ['nowplaying', 'tuning', 'year', 'path', 'score', 'info', 'progress', 'art'],
+    elements: {
+      nowplaying: { x: 43.13099787785457, y: 0, width: 101.0521240234375, height: 20, fontSize: 16, visible: true, name: 'Now Playing' },
+      tuning:     { x: 33.46253908597506, y: 29.703125000000004, width: 78.46353149414062, height: 45.00000762939453, fontSize: 16, visible: true, name: 'Tuning' },
+      year:       { x: 48.55143326979417, y: 29.700519561767578, width: 47.833343505859375, height: 45, fontSize: 16, visible: true, name: 'Year' },
+      path:       { x: 57.74989788348858, y: 29.700523376464844, width: 76.41535949707031, height: 45, fontSize: 16, visible: true, name: 'Path' },
+      score:      { x: 72.44491577148438, y: 0, width: 143.2864227294922, height: 104.40625, fontSize: 20, visible: true, name: 'Score' },
+      info:       { x: 33.46153846153846, y: 51.70312500000001, width: 345.98960876464844, height: 70.59375, fontSize: 20, visible: true, name: 'Song Title & Artist' },
+      progress:   { x: 0, y: 87, width: 519.9947967529297, height: 26, fontSize: 20, visible: true, name: 'Song Time' },
+      art:        { x: 0, y: 0, scale: 2.07142855844609, visible: true, name: 'Album Art' },
+    },
+    visuals: {
+      accent: '#ff8200',
+      accentRgb: '255 130 0',
+      chipColor: '#000000',
+      chipRgb: '0 0 0',
+      chipAlpha: 0,
+      borderWidth: 1,
+      bold: false,
+      font: 'Arial Black',
+      stageWidth: 520,
+      stageHeight: 200,
+      canvasBgColor: '#000000',
+      canvasBgRgb: '0 0 0',
+      canvasBgAlpha: 0,
+      elementHeadSize: 10,
+      edgeRounding: 0,
+      fadeSeconds: 10,
+      confettiEnabled: true,
+      confettiDuration: 7,
+      confettiVolume: 0.1,
+      confettiTriggerAt: 100,
+    },
+  };
+
+  // Latest visuals object, kept at module scope — fireConfetti() (below)
+  // needs confettiEnabled/Duration/Volume/TriggerAt, but `visuals` itself
+  // only exists inside renderLayout()'s own closure.
+  let lastVisuals = LAYOUT_DATA.visuals;
+
+  // ── layout/visuals renderer — same logic as the original static render page,
+  // now a reusable named function instead of a run-once IIFE: the editor
+  // (assets/editor.html) can save a new layout at
+  // any time, and this gets re-invoked live via the WebSocket below so an
+  // already-open OBS Browser Source picks it up without a refresh. ──
+  function renderLayout(data) {
+    const root = document.documentElement;
+    const stage = document.getElementById('stage');
+    const layout = data.elements;
+    const order = data.order;
+    const visuals = data.visuals;
+    lastVisuals = visuals;
+
+    // A re-apply (not the first call) may be dropping/renaming custom text
+    // elements the previous layout had — clear them all and let the
+    // "build custom elements" step below recreate whatever the NEW data
+    // actually contains, same as the editor's own importState() does on
+    // every import rather than trying to diff old vs. new custom ids.
+    document.querySelectorAll('.obj-custom').forEach((el) => el.remove());
+
+    const NAME_SYNC_SELECTOR = {
+      nowplaying: '.eyebrow-standalone',
+      path: '.stat-label',
+      tuning: '.stat-label',
+      year: '.stat-label',
+      score: '.stat-label',
+    };
+
+    function setupTicker(ticker) {
+      const track = ticker.querySelector('.ticker-track');
+      if (!track) return;
+      ticker.classList.remove('is-overflowing');
+      track.style.removeProperty('--ticker-shift');
+      track.style.removeProperty('animation-duration');
+      const overflow = track.scrollWidth - ticker.clientWidth;
+      if (overflow > 2) {
+        ticker.classList.add('is-overflowing');
+        track.style.setProperty('--ticker-shift', '-' + overflow + 'px');
+        track.style.setProperty('animation-duration', Math.max(4, overflow / 28).toFixed(2) + 's');
+      }
+    }
+    function setupAllTickers() {
+      document.querySelectorAll('.ticker').forEach(setupTicker);
+    }
+    window._marqueeSetupAllTickers = setupAllTickers;
+    // Exposed singularly too — applyLiveState() below re-measures only the
+    // specific ticker(s) whose text actually changed on a given update,
+    // not every ticker on the page. See its own comment for why that
+    // distinction matters (it's the fix for an intermittent-scrolling bug).
+    window._marqueeSetupTicker = setupTicker;
+
+    function updateCornerRounding(id) {
+      const el = document.getElementById('obj-' + id);
+      if (!el || !layout[id] || layout[id].visible === false) return;
+      const EPS = 2;
+      const stageRect = stage.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const touchesLeft = (r.left - stageRect.left) <= EPS;
+      const touchesTop = (r.top - stageRect.top) <= EPS;
+      const touchesRight = (stageRect.right - r.right) <= EPS;
+      const touchesBottom = (stageRect.bottom - r.bottom) <= EPS;
+      el.style.setProperty('--corner-tl', (touchesLeft && touchesTop) ? '1' : '0');
+      el.style.setProperty('--corner-tr', (touchesRight && touchesTop) ? '1' : '0');
+      el.style.setProperty('--corner-br', (touchesRight && touchesBottom) ? '1' : '0');
+      el.style.setProperty('--corner-bl', (touchesLeft && touchesBottom) ? '1' : '0');
+    }
+
+    function syncElementName(id) {
+      const selector = NAME_SYNC_SELECTOR[id];
+      if (!selector || !layout[id]) return;
+      const targetEl = document.getElementById('obj-' + id);
+      const caption = targetEl && targetEl.querySelector(selector);
+      if (caption) caption.textContent = layout[id].name;
+    }
+
+    function buildCustomElementDom(id, text) {
+      const el = document.createElement('div');
+      el.className = 'obj obj-custom';
+      el.id = 'obj-' + id;
+      const textWrap = document.createElement('span');
+      textWrap.className = 'custom-text';
+      const ticker = document.createElement('span');
+      ticker.className = 'ticker';
+      const track = document.createElement('span');
+      track.className = 'ticker-track';
+      track.textContent = text;
+      ticker.appendChild(track);
+      textWrap.appendChild(ticker);
+      el.appendChild(textWrap);
+      return el;
+    }
+    order.forEach((id) => {
+      const pos = layout[id];
+      if (pos && pos.custom && !document.getElementById('obj-' + id)) {
+        stage.appendChild(buildCustomElementDom(id, pos.text || ''));
+      }
+    });
+
+    Object.keys(layout).forEach((id) => {
+      const pos = layout[id];
+      const el = document.getElementById('obj-' + id);
+      if (!el) return;
+      el.style.left = pos.x + '%';
+      el.style.top = pos.y + '%';
+      el.style.display = pos.visible === false ? 'none' : '';
+      if ('scale' in pos) {
+        el.style.transform = 'scale(' + (pos.scale || 1) + ')';
+      } else {
+        el.style.width = pos.width ? pos.width + 'px' : '';
+        el.style.height = pos.height ? pos.height + 'px' : '';
+        el.style.fontSize = (pos.fontSize || 16) + 'px';
+      }
+    });
+    Object.keys(layout).forEach(updateCornerRounding);
+    Object.keys(NAME_SYNC_SELECTOR).forEach(syncElementName);
+
+    order.forEach((id, i) => {
+      const el = document.getElementById('obj-' + id);
+      if (el) el.style.zIndex = String(order.length - i);
+    });
+
+    if (visuals.accentRgb) root.style.setProperty('--accent-rgb', visuals.accentRgb);
+    if (visuals.accent) root.style.setProperty('--accent', visuals.accent);
+    if (visuals.chipRgb) root.style.setProperty('--chip-rgb', visuals.chipRgb);
+    if (typeof visuals.chipAlpha === 'number') root.style.setProperty('--chip-alpha', String(visuals.chipAlpha));
+    if (typeof visuals.borderWidth === 'number') root.style.setProperty('--border-width', visuals.borderWidth + 'px');
+    if (typeof visuals.elementHeadSize === 'number') root.style.setProperty('--element-head-size', visuals.elementHeadSize + 'px');
+    if (typeof visuals.edgeRounding === 'number') root.style.setProperty('--edge-rounding', visuals.edgeRounding + 'px');
+    if (visuals.canvasBgRgb) root.style.setProperty('--canvas-bg-rgb', visuals.canvasBgRgb);
+    if (typeof visuals.canvasBgAlpha === 'number') root.style.setProperty('--canvas-bg-alpha', String(visuals.canvasBgAlpha));
+    if (visuals.font) root.style.setProperty('--font-display', '"' + visuals.font + '", "Segoe UI", Arial, sans-serif');
+    if (typeof visuals.fadeSeconds === 'number') root.style.setProperty('--fade-seconds', visuals.fadeSeconds + 's');
+    document.body.classList.toggle('bold-active', !!visuals.bold);
+
+    setupAllTickers();
+  }
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => window._marqueeSetupAllTickers && window._marqueeSetupAllTickers(), 150);
+  });
+
+  // ── live content layer (this is what's new vs. the design-tool export) ──
+  function fmtTime(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+  // A perfect run showed "100.00%" — reported as wanting a clean "100%"
+  // instead, same as it used to show; every other value keeps its 2
+  // decimal places (94.32%, etc.), just this one boundary case doesn't.
+  function fmtPct(frac) {
+    const pct = frac * 100;
+    return (pct >= 100 ? '100' : pct.toFixed(2)) + '%';
+  }
+  // "E Standard" / "Standard" / "Standard Eb" -> "E STD" / "STD" / "STD Eb"
+  // — whatever's around the word "Standard" is left alone, only that one
+  // word gets abbreviated. Case-insensitive so it still catches it
+  // regardless of how displayTuningName happens to capitalize it.
+  function abbreviateTuning(text) {
+    return text ? String(text).replace(/standard/gi, 'STD') : text;
+  }
+  // setText now reports whether the text actually changed, and callers
+  // only re-measure the specific ticker that changed — not every ticker on
+  // the page — on every update. It used to call
+  // window._marqueeSetupAllTickers() unconditionally at the end of
+  // applyLiveState, which ran on every single state update including
+  // plain position ticks (every ~250ms while playing). That reset EVERY
+  // ticker's scroll animation (removes .is-overflowing, clears
+  // --ticker-shift/animation-duration, remeasures, re-adds) 4 times a
+  // second regardless of whether that ticker's own text had changed at
+  // all — the CSS animation needs several seconds to complete one visible
+  // pass (Math.max(4, overflow/28)s), so constantly restarting it before
+  // it ever visibly progressed produced exactly the reported symptom:
+  // "sometimes they don't scroll, other times they do." Reported live,
+  // root-caused by inspection (this dev environment had no live song to
+  // reproduce it against directly).
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (!el) return false;
+    const newText = (text === null || text === undefined || text === '') ? '—' : String(text);
+    if (el.textContent === newText) return false;
+    el.textContent = newText;
+    return true;
+  }
+  function setTextAndReticker(id, text) {
+    if (!setText(id, text)) return;
+    const el = document.getElementById(id);
+    const ticker = el && el.closest('.ticker');
+    if (ticker && window._marqueeSetupTicker) window._marqueeSetupTicker(ticker);
+  }
+
+  let lastArtUrl = null;
+  let lastLayoutJSON = null;
+  let lastScoreSongKey = null;
+
+  // Whole-overlay fade — visible whenever a real song is LOADED (playing
+  // OR paused), or while the editor has an active preview heartbeat going
+  // (state.preview — see routes.py) so a streamer can see real
+  // positioning in OBS while adjusting the layout without a song playing.
+  // Invisible only when nothing is loaded at all.
+  //
+  // Earlier version keyed this off state.playing instead of state.song —
+  // reported live: that made a plain pause mid-song trigger the same fade
+  // as actually leaving the player, which is wrong: pausing to talk to
+  // chat shouldn't hide the now-playing overlay, only actually finishing/
+  // leaving the song should. state.song is only ever cleared on a genuine
+  // song:loaded of nothing, or screen:changed away from the player (see
+  // screen.js) — never on a plain pause.
+  let lastVisible = null;
+  function updateVisibility(state) {
+    const visible = !!(state.song || state.preview);
+    if (visible === lastVisible) return;
+    lastVisible = visible;
+    const stage = document.getElementById('stage');
+    if (stage) stage.classList.toggle('stage-visible', visible);
+  }
+
+  function applyLiveState(state) {
+    if (!state) return;
+
+    // Layout/visuals changed (editor save, or the very first frame) — this
+    // must run BEFORE the content updates below so the final ticker-sizing
+    // pass measures text against the CURRENT layout, not a stale one.
+    const layoutJSON = state.layout ? JSON.stringify(state.layout) : null;
+    if (layoutJSON && layoutJSON !== lastLayoutJSON) {
+      lastLayoutJSON = layoutJSON;
+      renderLayout(state.layout);
+    } else if (!layoutJSON && lastLayoutJSON === null) {
+      // Nothing saved yet anywhere (fresh install) — fall back to the
+      // built-in default so the stage isn't empty before anyone's opened
+      // the editor even once.
+      lastLayoutJSON = JSON.stringify(LAYOUT_DATA);
+      renderLayout(LAYOUT_DATA);
+    }
+
+    updateVisibility(state);
+
+    const preview = (!state.song && state.preview) ? state.preview : null;
+    const song = state.song || (preview && preview.song);
+    const position = state.song ? state.position : ((preview && preview.position) || { time: 0, duration: 0 });
+    const score = state.song ? state.score : (preview && preview.score);
+
+    const artImg = document.getElementById('art-img');
+
+    // Reported live: text reset to "—" and the album art vanished almost
+    // instantly (its own fade-in/out transition is a fixed 0.25s) the
+    // moment a song ended, while the STAGE's own opacity fade was just
+    // starting its much slower multi-second transition — content visibly
+    // popping away well before the box around it had finished fading, an
+    // obviously mismatched "global fade speed." Fix: when there's no
+    // song/preview to show, this whole block now does nothing at all
+    // instead of blanking everything — the last real content just stays
+    // frozen exactly as it was, and visually disappears ONLY via the
+    // stage's own opacity fade (updateVisibility above), at the exact
+    // same rate as literally everything else on the stage, because it's
+    // the same one CSS transition on the shared ancestor. Content is only
+    // actually replaced once a new song (or preview) genuinely arrives.
+    if (song) {
+      setTextAndReticker('val-title', song.title);
+      setTextAndReticker('val-artist', song.artist);
+      setTextAndReticker('val-tuning', abbreviateTuning(song.tuning));
+      setTextAndReticker('val-path', song.path);
+      setTextAndReticker('val-year', song.year);
+      if (song.artUrl && song.artUrl !== lastArtUrl) {
+        lastArtUrl = song.artUrl;
+        artImg.classList.remove('loaded');
+        artImg.onload = () => artImg.classList.add('loaded');
+        artImg.onerror = () => artImg.classList.remove('loaded');
+        artImg.src = song.artUrl;
+      } else if (!song.artUrl) {
+        lastArtUrl = null;
+        artImg.removeAttribute('src');
+        artImg.classList.remove('loaded');
+      }
+
+      const pos = position || { time: 0, duration: 0 };
+      setTextAndReticker('val-time-elapsed', fmtTime(pos.time));
+      setTextAndReticker('val-time-duration', fmtTime(pos.duration));
+      const pct = pos.duration > 0 ? Math.min(100, Math.max(0, (pos.time / pos.duration) * 100)) : 0;
+      const fill = document.getElementById('progress-fill');
+      if (fill) fill.style.width = pct + '%';
+
+      // Reported live: the score vanished the instant a song ended, well
+      // before the stage's own fade-out finished. Cause: note_detect
+      // disables itself right around song-end (see currentScorePayload()'s
+      // own comment in screen.js), so the score update right after
+      // song:ended has hasCurrent:false, and this used to blank val-score
+      // the moment that arrived. Fixed the same way title/art/position
+      // already freeze instead of blanking (see this block's own header
+      // comment above): val-score only ever gets cleared back to "—" when
+      // a genuinely NEW song has loaded (tracked via filename); an
+      // hasCurrent:false reading for the SAME song — "nothing judged yet"
+      // right after load, or "song just ended" — leaves whatever's already
+      // showing alone, so a real final score stays visible through the
+      // fade instead of disappearing the instant the song stops. Known
+      // minor edge case: replaying the identical file (same filename)
+      // without leaving the player won't reset the display until the
+      // first note of the new run is judged — accepted rather than adding
+      // a second identity signal for a narrow, low-stakes case.
+      const songKey = song.filename || null;
+      if (songKey !== lastScoreSongKey) {
+        lastScoreSongKey = songKey;
+        setTextAndReticker('val-score', null);
+      }
+      if (score) {
+        if (score.hasCurrent) setTextAndReticker('val-score', fmtPct(score.accuracy));
+        // Previous-score ('Prev X%') display disabled per request
+        // (2026-07-20) — not working correctly, and the underlying
+        // FeedBack stats/scoring code this depends on is expected to
+        // be reworked soon, so it's not worth chasing against a data
+        // shape that's about to change. val-prev is simply never
+        // written now, so it stays blank. Re-enable by uncommenting
+        // both lines below once that's revisited.
+        // setTextAndReticker('val-prev', score.prevAccuracy != null ? ('Prev ' + fmtPct(score.prevAccuracy)) : ' ');
+      } else {
+        // setTextAndReticker('val-prev', ' ');
+      }
+    }
+  }
+
+  // ── confetti — ported from the editor's own
+  // fireConfetti() (the only place this ever existed before now; see the
+  // .confetti-canvas CSS comment above). Logic is otherwise unchanged —
+  // same particle system, same cannon+rain spawn pattern, same
+  // accent-derived palette — the only real difference is WHAT calls it:
+  // the editor only ever had a manual "Test Confetti" button (its own
+  // comment there: "NOT wired to a real trigger yet... will need BOTH:
+  // (1) the song actually ending... and (2) that song's final score
+  // reading at or above visuals.confettiTriggerAt"). Both of those are
+  // real now — see the "song-ended" WS event handling below, which is
+  // exactly that trigger. ──
+  function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+
+  let confettiAnimId = null;
+  function fireConfetti() {
+    console.log('Marquee: fireConfetti() called');
+    const visuals = lastVisuals || LAYOUT_DATA.visuals;
+    if (!visuals.confettiEnabled) { console.log('Marquee: fireConfetti aborted — confettiEnabled is false'); return; }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      console.log('Marquee: fireConfetti aborted — prefers-reduced-motion is on');
+      return;
+    }
+    const stage = document.getElementById('stage');
+    const canvas = document.getElementById('confettiCanvas');
+    if (!stage || !canvas) { console.log('Marquee: fireConfetti aborted — #stage or #confettiCanvas missing from the DOM'); return; }
+    console.log('Marquee: confetti particle system starting');
+    const dpr = window.devicePixelRatio || 1;
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff8200';
+    const COLORS = [accent, '#ffd37a', '#f3e9d8'];
+
+    function currentDurationMs() {
+      return clamp(visuals.confettiDuration, 1, 20) * 1000;
+    }
+    const MIN_RATE_PER_SEC = 20;
+    const MAX_RATE_PER_SEC = 1200;
+    const volume = clamp(visuals.confettiVolume, 0, 1);
+    const ratePerSec = MIN_RATE_PER_SEC + volume * (MAX_RATE_PER_SEC - MIN_RATE_PER_SEC);
+    const GRAVITY = 0.02;
+    const ANGLE_SPREAD_DEG = 25;
+
+    function spawnCannon() {
+      const fromLeft = Math.random() < 0.5;
+      const angleRad = ((45 + (Math.random() - 0.5) * ANGLE_SPREAD_DEG) * Math.PI) / 180;
+      const speed = 1.8 + Math.random() * 1.4;
+      return {
+        x: fromLeft ? Math.random() * 14 : w - Math.random() * 14,
+        y: h - Math.random() * 10,
+        size: 4 + Math.random() * 5,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        vx: Math.cos(angleRad) * speed * (fromLeft ? 1 : -1),
+        vy: -Math.sin(angleRad) * speed,
+        rotation: Math.random() * 360,
+        vr: (Math.random() - 0.5) * 12,
+        rect: Math.random() < 0.5,
+      };
+    }
+    function spawnRain() {
+      return {
+        x: Math.random() * w,
+        y: -10,
+        size: 4 + Math.random() * 5,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        vx: (Math.random() - 0.5) * 2.2,
+        vy: 1 + Math.random() * 1.25,
+        rotation: Math.random() * 360,
+        vr: (Math.random() - 0.5) * 12,
+        rect: Math.random() < 0.5,
+      };
+    }
+
+    if (confettiAnimId) cancelAnimationFrame(confettiAnimId);
+    let particles = [];
+    let cannonCarry = 0;
+    let rainCarry = 0;
+    const start = performance.now();
+    let lastFrameTime = start;
+    function frame(now) {
+      const elapsed = now - start;
+      const dt = now - lastFrameTime;
+      lastFrameTime = now;
+      const durationMs = currentDurationMs();
+      const fadeMs = Math.min(500, durationMs * 0.3);
+      const fade = elapsed > durationMs - fadeMs ? Math.max(0, (durationMs - elapsed) / fadeMs) : 1;
+
+      if (elapsed < durationMs) {
+        cannonCarry += (ratePerSec / 2) * (dt / 1000);
+        rainCarry += (ratePerSec / 2) * (dt / 1000);
+        while (cannonCarry >= 1) {
+          const p = spawnCannon();
+          const phase = Math.random();
+          p.x += p.vx * phase;
+          p.y += p.vy * phase;
+          p.vy += GRAVITY * phase;
+          particles.push(p);
+          cannonCarry -= 1;
+        }
+        while (rainCarry >= 1) {
+          const p = spawnRain();
+          const phase = Math.random();
+          p.x += p.vx * phase;
+          p.y += p.vy * phase;
+          p.vy += GRAVITY * phase;
+          particles.push(p);
+          rainCarry -= 1;
+        }
+      }
+
+      ctx.clearRect(0, 0, w, h);
+      particles = particles.filter((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += GRAVITY;
+        p.rotation += p.vr;
+        if (p.y - p.size > h) return false;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rotation * Math.PI) / 180);
+        ctx.fillStyle = p.color;
+        if (p.rect) {
+          ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.6);
+        } else {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        return true;
+      });
+
+      if (elapsed < durationMs || particles.length > 0) {
+        confettiAnimId = requestAnimationFrame(frame);
+      } else {
+        ctx.clearRect(0, 0, w, h);
+        confettiAnimId = null;
+      }
+    }
+    confettiAnimId = requestAnimationFrame(frame);
+  }
+
+  // The real trigger: a song-ended event (see routes.py/screen.js) whose
+  // final score met or beat the configured threshold. >= , not > — a
+  // Trigger At of 100 means "only a perfect run," and a perfect run's
+  // accuracy is exactly 1.
+  function handleServerEvent(data) {
+    console.log('Marquee: received server event', data);
+    if (data.event === 'song-ended') {
+      const visuals = lastVisuals || LAYOUT_DATA.visuals;
+      const sc = data.score;
+      const pct = sc ? (sc.accuracy * 100) : null;
+      console.log('Marquee: confetti check — score =', sc, 'accuracy% =', pct,
+        'confettiEnabled =', visuals.confettiEnabled, 'confettiTriggerAt =', visuals.confettiTriggerAt);
+      if (!sc || !sc.hasCurrent) {
+        console.log('Marquee: confetti NOT fired — no current score on this event');
+      } else if (typeof visuals.confettiTriggerAt !== 'number') {
+        console.log('Marquee: confetti NOT fired — confettiTriggerAt missing from visuals');
+      } else if (pct < visuals.confettiTriggerAt) {
+        console.log('Marquee: confetti NOT fired — ' + pct.toFixed(2) + '% is below the ' + visuals.confettiTriggerAt + '% trigger');
+      } else {
+        console.log('Marquee: confetti FIRING —', pct.toFixed(2) + '% >= ' + visuals.confettiTriggerAt + '%');
+        fireConfetti();
+      }
+    }
+  }
+
+  // ── transport: WebSocket to this plugin's own backend, relative to
+  // wherever this render page is being served from (works identically
+  // whether OBS/browser hits it via 127.0.0.1 or a LAN hostname — no
+  // hardcoded port, since the desktop build's backend port isn't fixed
+  // at 8000 the way `python main.py`'s default is; confirmed live it can
+  // be a different port, e.g. 18000, depending on how the app was packaged/launched). ──
+  const PLUGIN_ID = 'marquee';
+  let connDotTimer = null;
+  function markStale(stale) {
+    const dot = document.getElementById('conn-dot');
+    if (dot) dot.classList.toggle('stale', !!stale);
+  }
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(proto + '://' + location.host + `/ws/plugins/${PLUGIN_ID}/live`);
+    ws.onopen = () => markStale(false);
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data && data.event) handleServerEvent(data);
+        else applyLiveState(data);
+      } catch (e) { /* ignore malformed frame */ }
+    };
+    ws.onclose = () => { markStale(true); setTimeout(connect, 1000); };
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  }
+
+  fetch(`/api/plugins/${PLUGIN_ID}/state`).then((r) => r.json()).then(applyLiveState).catch(() => {});
+  connect();
+</script>
+</body>
+</html>
