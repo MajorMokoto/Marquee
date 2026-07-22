@@ -82,6 +82,18 @@ _DEFAULT_LAYOUT = {
         "confettiDuration": 7,
         "confettiVolume": 0.1,
         "confettiTriggerAt": 100,
+        "marqueeScroll": False,
+        "marqueeScrollSpeed": 80,
+        "marqueeEdgeFade": False,
+        "marqueeSparkle": False,
+        "marqueeSparkleSize": 10,
+        "marqueeBulbMode": "off",
+        "marqueeBulbSize": 2.8,
+        "marqueeBulbGap": 11,
+        "marqueeBulbScroll": True,
+        "marqueeBulbFlicker": False,
+        "marqueeBulbFlickerIntensity": 0.6,
+        "marqueeBulbFlickerRandom": False,
     },
 }
 

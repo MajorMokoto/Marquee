@@ -10,6 +10,6 @@
   "nav": { "label": "Marquee", "screen": "marquee" },
   "screen": "screen.html",
   "fullscreen": true,
-  "category": "stream",
+  "category": "tools",
   "description": "OBS overlay for now-playing info — song/artist, tuning, score, art, and progress, freely positioned and styled to match your stream."
 }

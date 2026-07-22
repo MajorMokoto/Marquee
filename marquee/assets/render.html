@@ -29,6 +29,24 @@
     --element-head-size: 10px;
     --border-width: 1px;
     --edge-rounding: 0px;
+    /* Marquee Bulbs' own size/gap live in visuals.marqueeBulbSize/
+       marqueeBulbGap (plain JS state, read directly by setBulbLoop())
+       rather than a CSS custom property — its dash pattern has to divide
+       the element's actual current perimeter evenly, which only JS can
+       compute, so there's nothing for a CSS var to drive here. */
+    /* Album Art is the one element positioned via a CSS transform:scale()
+       on itself (see the `if ('scale' in pos)` branch below) rather than
+       plain width/height — since a transform magnifies every descendant
+       uniformly, its bulb ring would otherwise render `scale`x bigger
+       than the same configured Bulb Size/Gap everywhere else. --art-scale
+       defaults to 1 (a no-op) and is overridden only on #obj-art itself,
+       right alongside where its transform is set; setBulbLoop() reads it
+       straight off the element and divides it back out, so the
+       correction stays in sync with live resizing without any CSS
+       involved. */
+    --art-scale: 1;
+    --marquee-star-size: 10px;
+    --marquee-bulb-flicker-intensity: 0.6;
     --content-width: min(1200px, 94vw);
     --stage-w-px: 520px;
     --stage-ratio: 520 / 200;
@@ -96,6 +114,15 @@
 
   .obj {
     position: absolute;
+    /* Centers each element's text stack within its own box, both axes —
+       see editor.html's .obj rule for the full reasoning (mirrored here).
+       align-items stays default (stretch) so ticker-wrapping children
+       keep their full box width, needed for overflow/bounce/marquee-scroll
+       math; .stat-label is the one plain-text exception, centered via its
+       own align-self instead. */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     background: rgb(var(--chip-rgb) / var(--chip-alpha));
     border-width: var(--border-width);
     border-style: solid;
@@ -145,15 +172,36 @@
     font-size: 1.2em; line-height: 1.15; color: var(--paper); letter-spacing: -0.01em;
   }
   .artist { margin: 0; font-size: 0.84em; color: var(--paper-dim); font-weight: 600; }
+  /* Marquee Scroll only: Song Title & Artist collapses to one line —
+     "Artist - Song" — in the title's own large styling, scrolling as a
+     single ticker, instead of two separately-scrolling lines. Class is
+     toggled by applyLiveState() alongside the text swap into val-title;
+     see its own comment. */
+  .obj-info.info-combined-line .artist { display: none; }
+  .obj-info.info-combined-line .title { margin-bottom: 0; }
 
   .obj-label { width: max-content; }
+  /* font-size matches .stat-label exactly (var(--element-head-size), not
+     em) — Now Playing's one line of text plays the same "header" role
+     Tuning/Path/Year/Score's captions do, so it obeys the same Element
+     Header Text Size setting instead of being scoped out of it.
+     display:block (not the span default of inline) so it lays out the
+     same way .stat-value/.custom-text do — needed now that its text
+     lives inside a nested .ticker, which is itself display:block and
+     needs a block-level ancestor to size/clip against correctly. */
   .eyebrow-standalone {
-    font-size: 0.62em; letter-spacing: 0.16em; text-transform: uppercase;
+    display: block;
+    font-size: var(--element-head-size, 10px); letter-spacing: 0.16em; text-transform: uppercase;
     color: var(--accent); font-weight: 700;
     white-space: nowrap;
   }
 
-  .ticker { display: block; overflow: hidden; }
+  /* text-align:center on .ticker (not .ticker-track) so the static,
+     fits-fine case centers the text, while the animated states below
+     reset it back to left — their translateX keyframes assume a
+     flush-left starting position. See editor.html's .ticker rule. */
+  .ticker { display: block; overflow: hidden; text-align: center; }
+  .ticker.is-overflowing, .ticker.marquee-scroll-active { text-align: left; }
   .ticker-track { display: inline-block; white-space: nowrap; }
   .ticker.is-overflowing .ticker-track {
     animation-name: ticker-bounce;
@@ -165,12 +213,280 @@
     50%      { transform: translateX(var(--ticker-shift, 0)); }
     62%, 100% { transform: translateX(0); }
   }
+  /* Marquee Scroll (opt-in, Visual Settings toggle) — a genuine
+     continuous marquee-sign crawl instead of the bounce-on-overflow
+     ticker above: setupMarqueeScrollTicker() (JS) duplicates the text
+     into enough repeated .marquee-copy spans, evenly spaced by
+     --marquee-gap, that shifting the whole track left by exactly one
+     copy's width + gap (--marquee-unit) looks identical to the
+     starting frame — so the loop is seamless and the next copy is
+     always already chasing the tail of the one ahead of it, instead of
+     the ticker sitting empty while a single instance travels all the
+     way back around to re-enter. Mutually exclusive with
+     .is-overflowing — JS never applies both to the same ticker at
+     once. */
+  .ticker.marquee-scroll-active .ticker-track {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--marquee-gap, 3em);
+    animation-name: marquee-scroll-move;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-duration: var(--marquee-duration, 8s);
+  }
+  .ticker.marquee-scroll-active .marquee-copy {
+    flex: none;
+    white-space: nowrap;
+  }
+  @keyframes marquee-scroll-move {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(-1 * var(--marquee-unit, 100px))); }
+  }
+  /* Marquee flair — both opt-in per their own Visual Settings toggle,
+     nested under (only meaningful with) Marquee Scroll itself; JS only
+     ever adds these two classes alongside .marquee-scroll-active. */
+  .ticker.marquee-edge-fade-active {
+    /* Percentage-based, not fixed px, so the fade stays proportional
+       whether the element is tiny or huge instead of eating a bigger
+       share of a small box. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%);
+  }
+  /* One small star per gap, pure CSS overlay via ::after — deliberately
+     NOT an extra flex child, so it never changes --marquee-unit/the
+     loop-distance math above; it just sits centered in the gap space
+     that's already there. Staggered nth-child delays so multiple
+     stars (short text in a wide box = many repeated copies = many
+     gaps) don't all twinkle in lockstep.
+     font-size is --marquee-star-size in PX, not em — reported live: at
+     em, the exact same Marquee Star Size slider value rendered at a
+     different actual pixel size on every element, since em is relative
+     to whatever font-size that PARTICULAR element happens to be
+     configured at (a big Song Title vs. a small Tuning value, etc.). An
+     absolute px value is sized ONLY by the slider, identically on every
+     element, regardless of that element's own font-size.
+     :not(.marquee-link-copy) — Roll's link ticker (see
+     buildLinkSegmentSpan) carries its own real trailing separator inside
+     the copy's text content instead, so its wrap gap matches its internal
+     "--"/"- ★ ★ ★ -" gaps exactly. Without this exclusion, this generic
+     plain-star overlay painted on top of/instead of that real separator,
+     reported live as a star cluster with no dashes at the loop's
+     turnaround — a visibly different gap than every other one in the
+     Roll. */
+  .ticker.marquee-stars-active .marquee-copy {
+    position: relative;
+  }
+  .ticker.marquee-stars-active .marquee-copy:not(.marquee-link-copy)::after {
+    content: '\2605 \2605 \2605';
+    position: absolute;
+    left: calc(100% + var(--marquee-gap, 3em) / 2);
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--accent);
+    font-size: var(--marquee-star-size, 10px);
+    letter-spacing: 0.15em;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: marquee-star-twinkle 1.6s ease-in-out infinite;
+  }
+  .ticker.marquee-stars-active .marquee-copy:nth-child(2n)::after { animation-delay: 0.4s; }
+  .ticker.marquee-stars-active .marquee-copy:nth-child(3n)::after { animation-delay: 0.9s; }
+  @keyframes marquee-star-twinkle {
+    0%, 100% { opacity: 0.2; }
+    50%      { opacity: 1; }
+  }
+  /* Marquee Scroll Roll's segment separators — the same colored,
+     twinkling star cluster as the Marquee Stars flair's own repeat-gap
+     stars above (same keyframe, same accent color, same size var), just
+     inline within the combined text instead of an ::after overlay
+     between repeats. See editor.html's matching comment for the full
+     reasoning (mirrored here) — an earlier version hid an inactive
+     cluster via visibility:hidden, which kept it invisible but still
+     reserved its full layout space (the star text at the surrounding
+     text's often-large font-size, plus this rule's own extra margin),
+     reading as an oversized dead gap between merged segments even with
+     Stars off. Fixed at the source instead — buildLinkSegmentSpan() (JS)
+     now picks this span's TEXT CONTENT itself based on Marquee Stars:
+     the real star cluster when on, or a few plain spaces (same as the
+     bounce-mode separator) when off. This class now only carries what's
+     ACTUALLY conditional: the color/size/animation that makes an active
+     star cluster look like one. */
+  .marquee-star-separator {
+    display: inline-block;
+    /* Load-bearing for the plain-space (Stars off) content specifically —
+       see editor.html's matching comment for why: an inline-block whose
+       ENTIRE content is whitespace gets that whitespace collapsed away to
+       nothing (measured a genuine 0px live), so segments ran together
+       with no gap at all instead of the intended small one.
+       white-space:pre preserves it regardless of position; harmless for
+       the active star cluster, which has real content and was never
+       subject to this. */
+    white-space: pre;
+  }
+  .ticker.marquee-stars-active .marquee-star-separator {
+    color: var(--accent);
+    font-size: var(--marquee-star-size, 10px);
+    /* Breathing room around the star cluster specifically — plain-space
+       mode needs none of this, it already reads fine at the surrounding
+       text's own spacing (see the bounce-mode separator, which never had
+       this either). */
+    margin: 0 0.6em;
+    animation: marquee-star-twinkle 1.6s ease-in-out infinite;
+  }
+  .ticker.marquee-scroll-active {
+    position: relative;
+  }
+  /* Marquee Bulbs: ONE genuinely continuous ring of light bulbs tracing
+     the element's own border, built from 4 edge strips (top/right/
+     bottom/left) whose background-tile phases are computed together so
+     they connect into a single seamless loop instead of 4 independent
+     patterns. See editor.html's matching comment for the full reasoning
+     (mirrored here) — tried an SVG dashed-stroke path first, but round
+     bulbs need a near-zero dash length to render as circles rather than
+     pills, and stroke-dashoffset isn't compositor-only the way
+     `transform` is, so it read as jittery scroll motion at anything past
+     the smallest bulb sizes. Back to 4 strips, but each edge's tile
+     pattern gets an explicit phase offset (see setBulbLoop, JS) computed
+     from its own cumulative distance around the shared perimeter, so the
+     four edges are mathematically one continuous grid. */
+  .marquee-bulb-edge-top,
+  .marquee-bulb-edge-right,
+  .marquee-bulb-edge-bottom,
+  .marquee-bulb-edge-left {
+    display: none;
+    position: absolute;
+    overflow: hidden;
+    pointer-events: none;
+    animation-name: var(--marquee-bulb-flicker-anim, none);
+    animation-duration: 2.2s;
+    animation-timing-function: steps(1, jump-none);
+    animation-iteration-count: infinite;
+    /* Negative delay, computed once per element in setBulbLoop() —
+       synchronizes every element to one shared clock (this page's own
+       load time) instead of each starting its own cycle from 0 the
+       moment its bulb ring happens to get created. Without this, an
+       element created later than the rest (Marquee Roll, custom text,
+       or a built-in whose bulbs got toggled on after everyone else's)
+       drifts out of phase — same pattern, same duration, just a
+       different point in the cycle, most visible on Bulb Flicker's
+       abrupt on/off jumps. A negative delay makes the browser treat the
+       animation as already partway through, exactly where it would be
+       if it truly had been running since the shared epoch. */
+    animation-delay: var(--marquee-bulb-flicker-delay, 0s);
+  }
+  /* Inset by half a bulb diameter on the cross-axis, same idea as
+     .obj's own padding elsewhere — centers the dot exactly ON the
+     element's true edge instead of hanging half outside it.
+     --marquee-bulb-frame-inset (0 by default) adds an extra, independent
+     inward pull on top of that — only #stage's own ring gets a nonzero
+     value (see applyDecorativeBulbs/editor.html's matching comment),
+     pulling the layout border in far enough that it can never coincide
+     with an element positioned flush against the canvas edge. */
+  .marquee-bulb-edge-top, .marquee-bulb-edge-bottom {
+    left: calc(var(--marquee-bulb-dot-size, 2.8px) / 2 + var(--marquee-bulb-frame-inset, 0px));
+    right: calc(var(--marquee-bulb-dot-size, 2.8px) / 2 + var(--marquee-bulb-frame-inset, 0px));
+    height: var(--marquee-bulb-dot-size, 2.8px);
+  }
+  .marquee-bulb-edge-top { top: var(--marquee-bulb-frame-inset, 0px); }
+  .marquee-bulb-edge-bottom { bottom: var(--marquee-bulb-frame-inset, 0px); }
+  .marquee-bulb-edge-left, .marquee-bulb-edge-right {
+    top: calc(var(--marquee-bulb-dot-size, 2.8px) / 2 + var(--marquee-bulb-frame-inset, 0px));
+    bottom: calc(var(--marquee-bulb-dot-size, 2.8px) / 2 + var(--marquee-bulb-frame-inset, 0px));
+    width: var(--marquee-bulb-dot-size, 2.8px);
+  }
+  .marquee-bulb-edge-left { left: var(--marquee-bulb-frame-inset, 0px); }
+  .marquee-bulb-edge-right { right: var(--marquee-bulb-frame-inset, 0px); }
+  /* Not scoped to .ticker — every element wears this class directly on
+     its own .obj container (see applyDecorativeBulbs()/applyBulbFrame),
+     ticker or not.
+     Direct-child combinator (>), NOT a plain descendant selector — see
+     editor.html's matching comment: #stage can also carry
+     marquee-bulbs-active now, and every element's own edge spans live
+     inside #stage too, so a plain descendant selector matched them as
+     soon as #stage had the class regardless of that element's own
+     state. */
+  .marquee-bulbs-active > .marquee-bulb-edge-top,
+  .marquee-bulbs-active > .marquee-bulb-edge-right,
+  .marquee-bulbs-active > .marquee-bulb-edge-bottom,
+  .marquee-bulbs-active > .marquee-bulb-edge-left {
+    display: block;
+  }
+  /* The moving layer — one tile wider/taller than its viewport so the
+     translate can shift a full tile and land on an identical frame,
+     looping seamlessly. --marquee-bulb-phase (set per edge, on the fill
+     itself, in setBulbLoop) is the piece that turns 4 independent
+     tilings into one connected grid. */
+  .marquee-bulb-edge-fill {
+    position: absolute;
+    background-image: radial-gradient(circle, var(--bulb-hot, #ffd37a) calc(var(--marquee-bulb-dot-size, 2.8px) / 2), transparent calc(var(--marquee-bulb-dot-size, 2.8px) / 2 + 0.2px));
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-duration: var(--marquee-bulb-duration, 0.175s);
+    animation-delay: var(--marquee-bulb-scroll-delay, 0s);
+  }
+  .marquee-bulb-edge-top .marquee-bulb-edge-fill,
+  .marquee-bulb-edge-bottom .marquee-bulb-edge-fill {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: calc(100% + var(--marquee-bulb-tile, 0px));
+    background-repeat: repeat-x;
+    background-size: var(--marquee-bulb-tile, 0px) 100%;
+    animation-name: var(--marquee-bulb-loop-anim-x, none);
+  }
+  .marquee-bulb-edge-left .marquee-bulb-edge-fill,
+  .marquee-bulb-edge-right .marquee-bulb-edge-fill {
+    left: 0;
+    right: 0;
+    top: 0;
+    height: calc(100% + var(--marquee-bulb-tile, 0px));
+    background-repeat: repeat-y;
+    background-size: 100% var(--marquee-bulb-tile, 0px);
+    animation-name: var(--marquee-bulb-loop-anim-y, none);
+  }
+  @keyframes marquee-bulb-loop-x {
+    from { transform: translateX(var(--marquee-bulb-phase, 0px)); }
+    to   { transform: translateX(calc(var(--marquee-bulb-phase, 0px) - var(--marquee-bulb-tile, 0px))); }
+  }
+  @keyframes marquee-bulb-loop-y {
+    from { transform: translateY(var(--marquee-bulb-phase, 0px)); }
+    to   { transform: translateY(calc(var(--marquee-bulb-phase, 0px) - var(--marquee-bulb-tile, 0px))); }
+  }
+  /* Every edge flows in its own direction, tracing one continuous loop
+     around the whole frame: top flows left and right flows up (both the
+     keyframes' own default direction, unchanged); bottom and left
+     reverse the same keyframes to flow right and down respectively —
+     see editor.html's matching comment for why reversing doesn't disturb
+     the phase alignment above. */
+  .marquee-bulb-edge-bottom .marquee-bulb-edge-fill,
+  .marquee-bulb-edge-left .marquee-bulb-edge-fill {
+    animation-direction: reverse;
+  }
+  /* Irregular dip points (not an even pulse) so it reads as an actual
+     flickering bulb rather than a smooth breathing glow. Intensity
+     scales how deep the dips go — 0 stays effectively invisible, 1 dips
+     all the way to off. */
+  @keyframes marquee-bulb-flicker {
+    0%, 19%, 21%, 23%, 55%, 63%, 100% { opacity: 1; }
+    20%, 22%, 54%, 62% { opacity: calc(1 - var(--marquee-bulb-flicker-intensity, 0.6)); }
+  }
   @media (prefers-reduced-motion: reduce) {
     .ticker.is-overflowing .ticker-track { animation: none; }
+    .ticker.marquee-scroll-active .ticker-track { animation: none; }
+    .ticker.marquee-stars-active .marquee-copy::after { animation: none; opacity: 0.7; }
+    .ticker.marquee-stars-active .marquee-star-separator { animation: none; opacity: 0.7; }
+    .marquee-bulb-edge-top, .marquee-bulb-edge-right,
+    .marquee-bulb-edge-bottom, .marquee-bulb-edge-left,
+    .marquee-bulb-edge-fill { animation: none; }
   }
 
   .obj-stat { width: max-content; }
-  .stat-label { display: block; width: max-content; font-size: var(--element-head-size, 10px); letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; white-space: nowrap; }
+  /* align-self:center: width:max-content means the .obj default
+     align-items:stretch can't stretch this to the box's width. Plain,
+     non-scrolling caption text, so centering the box itself is correct
+     (everything else here wraps a .ticker and centers via that instead). */
+  .stat-label { display: block; width: max-content; align-self: center; font-size: var(--element-head-size, 10px); letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; white-space: nowrap; }
   .stat-value {
     display: block;
     font-variant-numeric: tabular-nums;
@@ -201,7 +517,7 @@
     margin-top: 2px;
   }
 
-  .obj-progress { width: 240px; display: flex; align-items: center; gap: 8px; }
+  .obj-progress { width: 240px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
   .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; }
   .progress-track { flex: 1; height: 3px; background: rgba(243, 233, 216, 0.14); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--bulb-hot)); transition: width 0.2s linear; }
@@ -236,15 +552,21 @@
     will-change: transform;
   }
 
-  .bold-active .title,
-  .bold-active .artist,
-  .bold-active .eyebrow-standalone,
-  .bold-active .stat-label,
-  .bold-active .stat-value,
-  .bold-active .stat-value-percent,
-  .bold-active .stat-value-prev,
-  .bold-active .time,
-  .bold-active .custom-text {
+  /* Scoped to .obj AND every descendant (the trailing `*`), not a list of
+     specific text-class names. font-weight etc. are inherited properties,
+     but several descendants (.artist, .eyebrow-standalone, .stat-value,
+     .custom-text, ...) already set their OWN explicit font-weight for
+     their normal look — an explicit value on the element itself always
+     wins over an inherited one regardless of !important, since importance
+     only decides between rules that target the SAME element. Matching
+     every descendant directly, not just .obj, is what actually forces
+     the override through — and it's what makes this reach any future
+     element's text automatically, with no new selector to add here.
+     currentColor still resolves per-element, not to .obj's own color, so
+     each descendant's stroke still matches ITS own text color exactly as
+     before. */
+  .bold-active .obj,
+  .bold-active .obj * {
     font-weight: 900 !important;
     font-synthesis: weight !important;
     -webkit-text-stroke: 0.5px currentColor;
@@ -289,7 +611,7 @@
   </div>
 
   <div class="obj obj-label" id="obj-nowplaying" data-id="nowplaying">
-    <span class="eyebrow-standalone">Now Playing</span>
+    <span class="eyebrow-standalone"><span class="ticker"><span class="ticker-track">Now Playing</span></span></span>
   </div>
 
   <div class="obj obj-info" id="obj-info" data-id="info">
@@ -365,6 +687,18 @@
       confettiDuration: 7,
       confettiVolume: 0.1,
       confettiTriggerAt: 100,
+      marqueeScroll: false,
+      marqueeScrollSpeed: 80,
+      marqueeEdgeFade: false,
+      marqueeSparkle: false,
+      marqueeSparkleSize: 10,
+      marqueeBulbMode: 'off',
+      marqueeBulbSize: 2.8,
+      marqueeBulbGap: 11,
+      marqueeBulbScroll: true,
+      marqueeBulbFlicker: false,
+      marqueeBulbFlickerIntensity: 0.6,
+      marqueeBulbFlickerRandom: false,
     },
   };
 
@@ -372,6 +706,19 @@
   // needs confettiEnabled/Duration/Volume/TriggerAt, but `visuals` itself
   // only exists inside renderLayout()'s own closure.
   let lastVisuals = LAYOUT_DATA.visuals;
+  // Captured ONCE, at true page load — the shared "epoch" every element's
+  // bulb animations sync against (see setBulbLoop's own comment).
+  // MUST live at this module scope, not inside renderLayout() — that
+  // function re-runs on every layout broadcast (which fires on every
+  // autosave tick while anything at all is being dragged, moved, or
+  // resized, not just bulb-related edits), and a fresh `performance.now()`
+  // captured on every one of those calls would reset "the epoch" itself
+  // each time, making the sync math always compute a near-zero elapsed
+  // time — exactly the reported bug: custom text (and anything else
+  // rebuilt on a live layout update) restarting its flicker every time
+  // an unrelated element gets moved, since it's always the ONLY thing
+  // computing elapsed time freshly against a THEN-current declaration.
+  const MARQUEE_BULB_EPOCH = performance.now();
 
   // ── layout/visuals renderer — same logic as the original static render page,
   // now a reusable named function instead of a run-once IIFE: the editor
@@ -384,6 +731,15 @@
     const layout = data.elements;
     const order = data.order;
     const visuals = data.visuals;
+    // Captured BEFORE lastVisuals is overwritten below — setBulbLoop()
+    // only ever sets --marquee-bulb-scroll-delay/-flicker-delay ONCE per
+    // element (see its own comment), so flipping Bulb Flicker Random needs
+    // an explicit forced
+    // resync afterward (resyncAllBulbDelays()); without detecting the
+    // flip here, that guard would just as correctly (and unhelpfully)
+    // protect the NEW mode from ever taking effect on anything already
+    // running.
+    const bulbFlickerRandomChanged = !!(lastVisuals && lastVisuals.marqueeBulbFlickerRandom) !== !!visuals.marqueeBulbFlickerRandom;
     lastVisuals = visuals;
 
     // A re-apply (not the first call) may be dropping/renaming custom text
@@ -394,16 +750,40 @@
     document.querySelectorAll('.obj-custom').forEach((el) => el.remove());
 
     const NAME_SYNC_SELECTOR = {
-      nowplaying: '.eyebrow-standalone',
+      // .ticker-track, not .eyebrow-standalone itself — Now Playing's
+      // text now lives inside a ticker (see #obj-nowplaying's markup),
+      // and writing textContent onto the OUTER wrapper would blow away
+      // that nested ticker structure instead of just updating its text.
+      nowplaying: '.ticker-track',
       path: '.stat-label',
       tuning: '.stat-label',
       year: '.stat-label',
       score: '.stat-label',
     };
 
-    function setupTicker(ticker) {
-      const track = ticker.querySelector('.ticker-track');
-      if (!track) return;
+    // Both ticker modes need to agree on what the "real" single-copy
+    // text is, whether or not a previous marquee-mode setup call has
+    // since duplicated it into repeated .marquee-copy children — plain
+    // track.textContent would return every copy concatenated together
+    // in that case. Read from the first copy if present, else the
+    // track's own (plain) text; collapse back to that single plain text
+    // node either way, since both bounce mode and a fresh marquee
+    // rebuild need to start from one clean copy.
+    function resetTrackToPlainText(track) {
+      const firstCopy = track.querySelector('.marquee-copy');
+      const text = firstCopy ? firstCopy.textContent : track.textContent;
+      if (track.children.length > 0) track.textContent = text;
+      return text;
+    }
+    function setupBounceTicker(ticker, track) {
+      resetTrackToPlainText(track);
+      ticker.classList.remove('marquee-scroll-active');
+      ticker.classList.remove('marquee-edge-fade-active');
+      ticker.classList.remove('marquee-stars-active');
+      ticker.classList.remove('marquee-bulbs-active');
+      track.style.removeProperty('--marquee-unit');
+      track.style.removeProperty('--marquee-gap');
+      track.style.removeProperty('--marquee-duration');
       ticker.classList.remove('is-overflowing');
       track.style.removeProperty('--ticker-shift');
       track.style.removeProperty('animation-duration');
@@ -414,8 +794,657 @@
         track.style.setProperty('animation-duration', Math.max(4, overflow / 28).toFixed(2) + 's');
       }
     }
+    // Continuous, seamlessly-looping marquee-sign crawl — see the
+    // .marquee-scroll-active CSS comment for the full rationale.
+    // Reported live: waiting for one instance to fully exit before the
+    // next one enters left the ticker empty for a stretch of every
+    // loop; fixed by duplicating the text into enough repeated copies
+    // (gap scales with font size, so it stays proportional at small
+    // element sizes too) that translating left by exactly one copy's
+    // width + gap is visually indistinguishable from the start
+    // position — the next copy is always already chasing the tail of
+    // the one ahead of it. Removes+reflows+re-adds the class rather
+    // than just updating the custom properties on an already-running
+    // animation, so a text/size change restarts cleanly instead of the
+    // browser carrying old positions into new keyframe values.
+    const MARQUEE_SCROLL_PX_PER_SEC_DEFAULT = 80;
+    const MARQUEE_BULB_SIZE_DEFAULT = 2.8;
+    // Fallback used only when visuals.marqueeBulbGap is missing/invalid.
+    const MARQUEE_BULB_GAP_DEFAULT = 11;
+    // See editor.html's matching comment — a fixed constant, deliberately
+    // not derived from Bulb Size or Bulb Gap, so neither slider drags the
+    // layout ring itself inward.
+    const MARQUEE_BULB_LAYOUT_FRAME_INSET_PX = 6;
+    // Matches @keyframes marquee-bulb-flicker's own fixed 2.2s duration
+    // (see the CSS) — kept as one source of truth here since the sync
+    // math below needs the raw number, not just the CSS string.
+    const MARQUEE_BULB_FLICKER_DURATION_MS = 2200;
+    // Shared core for every scrolling ticker — plain elements (Tuning,
+    // custom text, ...) via setupMarqueeScrollTicker below, AND Marquee
+    // Roll's multi-segment combined tickers via setupLinkScrollTicker
+    // further down — `buildCopy()` returns one fresh .marquee-copy node;
+    // called once to measure, then again per duplicate, so every copy is
+    // built the exact same way regardless of which caller it's for.
+    // Building the real (possibly styled, for Roll) DOM once and cloning
+    // ITS measurement, rather than measuring plain text and swapping in
+    // styled spans afterward, is what keeps --marquee-unit matching what
+    // actually renders — a stale/mismatched measurement is what a
+    // loop-boundary hitch actually is. The rAF self-correction pass below
+    // (guarded by a per-track generation counter, so a newer setup call's
+    // correction can never be overwritten by a stale older one firing
+    // after it) catches whatever sub-pixel drift remains after the
+    // initial synchronous measurement — cheap insurance against exactly
+    // that class of bug for every scrolling ticker, not just Roll's.
+    function runMarqueeScrollTicker(ticker, track, buildCopy, gapPxFn) {
+      ticker.classList.remove('is-overflowing');
+      track.style.removeProperty('--ticker-shift');
+      track.style.removeProperty('animation-duration');
+      const containerWidth = ticker.clientWidth;
+      const setupGen = (parseInt(track.dataset.scrollSetupGen || '0', 10) + 1);
+      track.dataset.scrollSetupGen = String(setupGen);
+
+      // marquee-scroll-active AND marquee-stars-active both have to be
+      // ON *during* measurement, not just applied afterward:
+      // .marquee-copy only gets flex-item layout (flex: none; white-space:
+      // nowrap) via ".ticker.marquee-scroll-active .marquee-copy", and —
+      // for Roll's separators specifically — .marquee-star-separator's own
+      // font-size only shrinks to --marquee-star-size via
+      // ".ticker.marquee-stars-active .marquee-star-separator"; measuring
+      // before either class is on gives a reference width that doesn't
+      // match what actually renders.
+      ticker.classList.add('marquee-scroll-active');
+      ticker.classList.toggle('marquee-stars-active', !!visuals.marqueeSparkle);
+      track.textContent = '';
+      const referenceCopy = buildCopy();
+      track.appendChild(referenceCopy);
+      // getBoundingClientRect().width, NOT scrollWidth — scrollWidth
+      // includes overflow from position:absolute descendants (Marquee
+      // Stars' ::after star cluster is deliberately absolutely-
+      // positioned, poking out past the copy's own right edge so it can
+      // sit in the gap — see .marquee-stars-active .marquee-copy::after),
+      // but that overflow contributes NOTHING to the real flex/gap
+      // distance between one copy and the next, since taking an element
+      // out of flow is exactly what position:absolute does. Measuring
+      // with scrollWidth made --marquee-unit bigger than the copies'
+      // real spacing whenever Marquee Stars was on, baking a permanent
+      // mismatch into every single loop rather than a one-time glitch.
+      // getBoundingClientRect().width reflects only the laid-out box,
+      // unaffected by descendant overflow, so it matches the real
+      // spacing regardless of Marquee Stars.
+      const singleWidth = referenceCopy.getBoundingClientRect().width;
+      // Reported live: for a Roll, the gap where the loop wraps (end of the
+      // last merged segment back to the start of the first) looked
+      // noticeably tighter than the "--" gap between segments WITHIN one
+      // pass — because it's a completely different number: this generic
+      // fallback (3 characters' worth of width) has nothing to do with how
+      // wide a Roll's own "--"/"- ★ ★ ★ -" separator actually renders.
+      // gapPxFn (passed by setupLinkScrollTicker below) measures that
+      // separator's real width instead, so the wrap reads as just another
+      // occurrence of the same gap instead of a visibly different one.
+      // Only Roll supplies this — a plain ticker has no such separator
+      // concept, so it keeps the generic fallback.
+      const customGapPx = typeof gapPxFn === 'function' ? gapPxFn(referenceCopy) : null;
+      const gapPx = (typeof customGapPx === 'number' && customGapPx >= 0)
+        ? customGapPx : parseFloat(getComputedStyle(track).fontSize) * 3;
+      const unit = singleWidth + gapPx;
+      const copiesNeeded = Math.max(2, Math.ceil(containerWidth / unit) + 1);
+
+      track.textContent = '';
+      for (let i = 0; i < copiesNeeded; i++) {
+        track.appendChild(buildCopy());
+      }
+
+      const speed = (typeof visuals.marqueeScrollSpeed === 'number' && visuals.marqueeScrollSpeed > 0)
+        ? visuals.marqueeScrollSpeed : MARQUEE_SCROLL_PX_PER_SEC_DEFAULT;
+      track.style.setProperty('--marquee-gap', gapPx + 'px');
+      track.style.setProperty('--marquee-unit', unit + 'px');
+      track.style.setProperty('--marquee-duration', Math.max(0.5, unit / speed).toFixed(2) + 's');
+      // Restart the animation cleanly (rather than the browser carrying
+      // over an in-flight position/duration from a previous run) —
+      // remove+reflow+re-add rather than just updating the custom
+      // properties on an already-running animation, so a text/size
+      // change restarts cleanly instead of the browser carrying old
+      // positions into new keyframe values.
+      ticker.classList.remove('marquee-scroll-active');
+      void track.offsetWidth;
+      ticker.classList.add('marquee-scroll-active');
+      ticker.classList.toggle('marquee-edge-fade-active', !!visuals.marqueeEdgeFade);
+      // marquee-stars-active was already set above, before measurement.
+      // Marquee Bulbs is handled separately, once per element (not per
+      // ticker) — see applyDecorativeBulbs()/applyBulbFrame — so every
+      // element gets the exact same bulb treatment regardless of whether
+      // it has a ticker at all.
+
+      // Self-correction pass: measured in the wild, a copy's very first
+      // measurement can come in narrower than the box actually on screen
+      // a moment later (most reliably reproduced with Roll's mixed-font-
+      // size separators, but cheap enough to run unconditionally for
+      // every scrolling ticker as a safety net) — re-check one frame
+      // later and patch just the two duration-driving custom properties,
+      // not a full rebuild, if what's actually rendered turned out wider
+      // than what was measured.
+      requestAnimationFrame(() => {
+        // A newer call has already rebuilt this same track — applying
+        // this (now stale) correction on top would fight whatever that
+        // newer call already set correctly.
+        if (track.dataset.scrollSetupGen !== String(setupGen)) return;
+        const liveCopy = track.querySelector('.marquee-copy');
+        if (!liveCopy) return;
+        // Same reasoning as the initial measurement above: real layout
+        // width, not scrollWidth (which would just re-confirm the same
+        // Marquee Stars-inflated number this pass exists to catch).
+        const actualWidth = liveCopy.getBoundingClientRect().width;
+        if (Math.abs(actualWidth - singleWidth) < 0.5) return;
+        const correctedUnit = actualWidth + gapPx;
+        track.style.setProperty('--marquee-unit', correctedUnit + 'px');
+        track.style.setProperty('--marquee-duration', Math.max(0.5, correctedUnit / speed).toFixed(2) + 's');
+      });
+    }
+    function buildPlainScrollCopy(text) {
+      const span = document.createElement('span');
+      span.className = 'marquee-copy';
+      span.textContent = text;
+      return span;
+    }
+    function setupMarqueeScrollTicker(ticker, track) {
+      const originalText = resetTrackToPlainText(track);
+      runMarqueeScrollTicker(ticker, track, () => buildPlainScrollCopy(originalText));
+    }
+    // Every ticker obeys Marquee Scroll — no per-element exceptions, no
+    // eligibility check: any element with a ticker gets it the moment the
+    // setting is on. Album Art is the only element with no ticker at all
+    // (it's an image, nothing to scroll) — it simply never reaches this
+    // function in the first place, since setupAllTickers only calls it
+    // for what querySelectorAll('.ticker') actually finds.
+    function setupTicker(ticker) {
+      const track = ticker.querySelector('.ticker-track');
+      if (!track) return;
+      if (visuals.marqueeScroll) {
+        setupMarqueeScrollTicker(ticker, track);
+      } else {
+        setupBounceTicker(ticker, track);
+      }
+    }
+    // Creates the 4 edge elements (top/right/bottom/left), each with a
+    // nested .marquee-bulb-edge-fill, once per element; every other call
+    // just leaves the existing ones alone.
+    function ensureBulbLoop(container) {
+      ['top', 'right', 'bottom', 'left'].forEach((dir) => {
+        let edge = container.querySelector(':scope > .marquee-bulb-edge-' + dir);
+        if (!edge) {
+          edge = document.createElement('span');
+          edge.className = 'marquee-bulb-edge-' + dir;
+          const fill = document.createElement('span');
+          fill.className = 'marquee-bulb-edge-fill';
+          edge.appendChild(fill);
+          container.appendChild(edge);
+        }
+      });
+    }
+    // Sizes the ring's 4 edges to the element's CURRENT rendered
+    // dimensions, phase-aligns their tile patterns so the whole thing
+    // reads as one continuous loop (not 4 independent ones), and sets
+    // whether each of the two INDEPENDENT effects (loop motion / flicker)
+    // is actually "on" — swapping an animation-name var to "none" when its
+    // effect is off is what lets Bulb Scroll and Bulb Flicker toggle
+    // independently without a combinatorial explosion of CSS classes.
+    //
+    // Two bits of math happen here:
+    //
+    // 1. A plain tile of size+gap almost never divides evenly into the
+    //    element's actual perimeter, which would leave one truncated bulb
+    //    right where the loop closes on itself. Instead, this picks the
+    //    whole number of tiles closest to what the requested size+gap
+    //    would produce, then divides the ACTUAL perimeter by that count to
+    //    get the tile size that fits exactly — same "gap is the flexible
+    //    one, size stays exact" split the density slider already uses
+    //    elsewhere, just applied per element instead of globally.
+    //
+    // 2. Each of the 4 edges tiles its own background independently, which
+    //    by default only guarantees ITS OWN dots are evenly spaced — not
+    //    that they land in step with the neighboring edge's dots at the
+    //    corner where they meet. Walking the perimeter clockwise from the
+    //    top-left corner (top -> right -> bottom -> left), each edge's
+    //    cumulative distance from that starting corner is computed, and
+    //    that distance mod the tile size becomes its --marquee-bulb-phase
+    //    — the offset that makes its OWN tiling continue the SAME grid the
+    //    previous edge was already on, instead of restarting its own count
+    //    from 0. The top edge is the reference (phase 0); everything else
+    //    is defined relative to it. Reversing an edge's animation
+    //    direction (see the CSS) doesn't disturb this — a periodic
+    //    animation visits the same positions over one cycle regardless of
+    //    which way it plays, so the alignment holds either way.
+    function setBulbLoop(container) {
+      const top = container.querySelector(':scope > .marquee-bulb-edge-top');
+      const right = container.querySelector(':scope > .marquee-bulb-edge-right');
+      const bottom = container.querySelector(':scope > .marquee-bulb-edge-bottom');
+      const left = container.querySelector(':scope > .marquee-bulb-edge-left');
+      if (!top || !right || !bottom || !left) return;
+      const topFill = top.querySelector('.marquee-bulb-edge-fill');
+      const rightFill = right.querySelector('.marquee-bulb-edge-fill');
+      const bottomFill = bottom.querySelector('.marquee-bulb-edge-fill');
+      const leftFill = left.querySelector('.marquee-bulb-edge-fill');
+
+      const bulbSize = (typeof visuals.marqueeBulbSize === 'number' && visuals.marqueeBulbSize > 0)
+        ? visuals.marqueeBulbSize : MARQUEE_BULB_SIZE_DEFAULT;
+      const bulbGap = (typeof visuals.marqueeBulbGap === 'number' && visuals.marqueeBulbGap >= 0)
+        ? visuals.marqueeBulbGap : MARQUEE_BULB_GAP_DEFAULT;
+      // Album Art is the one element whose OWN box gets CSS transform:
+      // scale()'d (see the `if ('scale' in pos)` branch above) — dividing
+      // by that same scale here, in JS, is what keeps its bulbs visually
+      // the same size as every other element's instead of scaling
+      // up/down with the art. Every other element's artScale is just 1
+      // (a no-op).
+      const artScale = container.id === 'obj-art'
+        ? (parseFloat(container.style.getPropertyValue('--art-scale')) || 1) : 1;
+      const size = bulbSize / artScale;
+      const gapWanted = bulbGap / artScale;
+      // See editor.html's matching comment — reads back whatever
+      // applyBulbFrame already set as this container's own frame inset
+      // (nonzero only for #stage) so the tiled rectangle shrinks by the
+      // same amount the CSS already pulled the edges in by.
+      const frameInset = parseFloat(container.style.getPropertyValue('--marquee-bulb-frame-inset')) || 0;
+
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const rectW = Math.max(0, w - size - 2 * frameInset);
+      const rectH = Math.max(0, h - size - 2 * frameInset);
+      const perimeter = 2 * (rectW + rectH);
+      const tileWanted = size + gapWanted;
+      // Never fewer than 4 — a very small or very narrow element (or a
+      // huge Bulb Size relative to it) shouldn't collapse to a handful of
+      // giant dashes; 4 keeps at least one bulb roughly per side.
+      const tileCount = perimeter > 0 && tileWanted > 0 ? Math.max(4, Math.round(perimeter / tileWanted)) : 0;
+      const tile = tileCount > 0 ? perimeter / tileCount : tileWanted;
+
+      container.style.setProperty('--marquee-bulb-dot-size', size.toFixed(2) + 'px');
+      container.style.setProperty('--marquee-bulb-tile', tile.toFixed(2) + 'px');
+      // Cumulative distance from the top-left corner, walking clockwise —
+      // see the function comment above for why each of these becomes a
+      // phase — WRAPPED into a single tile's range (JS's % can return
+      // negative, hence the extra +tile/%tile) rather than used raw.
+      // Correctness-wise either works — a periodic pattern shifted by
+      // phase or by phase-mod-tile looks identical — but the fill element
+      // is only ever ~1 tile wider than its own viewport (see the CSS), so
+      // shifting it by an un-wrapped cumulative distance (which grows with
+      // the element's own size, easily tens or hundreds of px) moves the
+      // entire fill box off past the edge of its viewport, past where
+      // overflow:hidden even has anything of it left to clip — not
+      // misaligned, just gone. Wrapping first keeps the shift within one
+      // tile, which is exactly the range the fill's own extra width was
+      // sized to cover. Left over-shoots back to a full perimeter (≡ 0 mod
+      // tile by construction), landing on the same phase as top — correct,
+      // not a coincidence: it's the same corner the loop started at.
+      const wrap = (v) => tile > 0 ? ((v % tile) + tile) % tile : 0;
+      topFill.style.setProperty('--marquee-bulb-phase', '0px');
+      rightFill.style.setProperty('--marquee-bulb-phase', wrap(-rectW).toFixed(2) + 'px');
+      bottomFill.style.setProperty('--marquee-bulb-phase', wrap(2 * rectW + rectH).toFixed(2) + 'px');
+      leftFill.style.setProperty('--marquee-bulb-phase', '0px');
+
+      const speed = (typeof visuals.marqueeScrollSpeed === 'number' && visuals.marqueeScrollSpeed > 0)
+        ? visuals.marqueeScrollSpeed : MARQUEE_SCROLL_PX_PER_SEC_DEFAULT;
+      // tile, not size+gap — the ACTUAL per-element tile computed above,
+      // so the ring's visual speed (px/sec around the loop) still tracks
+      // Marquee Scroll Speed exactly regardless of how much this
+      // element's own gap got stretched/shrunk to fit evenly.
+      const scrollDurationMs = tile > 0 ? (tile / speed) * 1000 : 0;
+      container.style.setProperty('--marquee-bulb-duration', (scrollDurationMs / 1000).toFixed(3) + 's');
+
+      const scrollOn = visuals.marqueeBulbScroll !== false;
+      const flickerOn = !!visuals.marqueeBulbFlicker;
+      container.style.setProperty('--marquee-bulb-loop-anim-x', scrollOn ? 'marquee-bulb-loop-x' : 'none');
+      container.style.setProperty('--marquee-bulb-loop-anim-y', scrollOn ? 'marquee-bulb-loop-y' : 'none');
+      container.style.setProperty('--marquee-bulb-flicker-anim', flickerOn ? 'marquee-bulb-flicker' : 'none');
+      const intensity = (typeof visuals.marqueeBulbFlickerIntensity === 'number' && Number.isFinite(visuals.marqueeBulbFlickerIntensity))
+        ? visuals.marqueeBulbFlickerIntensity : 0.6;
+      container.style.setProperty('--marquee-bulb-flicker-intensity', String(intensity));
+      // Sync to the shared epoch (see MARQUEE_BULB_EPOCH's own comment):
+      // a negative delay equal to "how far into this cycle would we be
+      // if it had been running since the epoch" makes the browser start
+      // the animation already at that position, instead of at 0 — so an
+      // element created long after the rest still lands in phase with
+      // everything else instead of visibly drifting.
+      //
+      // Set EXACTLY ONCE per element (guarded by whether this element's
+      // OWN inline style already has a value — never the computed/
+      // inherited one), unlike everything else in this function, which
+      // intentionally updates live on every call so Bulb Size/Scroll
+      // Speed/Flicker Intensity/etc. — and, now, plain resizing — stay
+      // reflected in real time. Reassigning the delay on an element whose
+      // animation is ALREADY running was tested live and does visibly
+      // perturb its timeline — this sync only works if a running
+      // element's delay is truly immutable after its first activation; a
+      // genuinely NEW element (freshly added, or a fresh DOM node from a
+      // live layout rebuild — see the comment on .obj-custom's own
+      // rebuild-on-every-update above) still computes its own fresh value
+      // here, using the current elapsed time, which is what lands it in
+      // the correct shared phase to begin with.
+      //
+      // Bulb Flicker Random flips ONLY the flicker half of this to a
+      // fresh Math.random() offset instead of the epoch formula — loop
+      // motion stays epoch-synced either way, since the setting is
+      // specifically about flicker timing, not bulb motion. Because this
+      // whole block only ever runs once per element (the guard above),
+      // "random" naturally means "freshly randomized every restart" —
+      // an element that gets rebuilt often (custom text, on every layout
+      // save) rerolls every time; one that never restarts keeps whatever
+      // it first rolled. Toggling Random on/off both forces every
+      // CURRENTLY-running element through this block again via
+      // resyncAllBulbDelays() (called from renderLayout() only on the
+      // tick the setting actually changed) — otherwise the "once ever"
+      // guard would just as correctly protect the new mode from ever
+      // reaching anything already active.
+      if (!container.style.getPropertyValue('--marquee-bulb-scroll-delay')) {
+        const elapsedMs = performance.now() - MARQUEE_BULB_EPOCH;
+        const scrollDelayMs = scrollDurationMs > 0 ? -(elapsedMs % scrollDurationMs) : 0;
+        const flickerDelayMs = visuals.marqueeBulbFlickerRandom
+          ? -(Math.random() * MARQUEE_BULB_FLICKER_DURATION_MS)
+          : -(elapsedMs % MARQUEE_BULB_FLICKER_DURATION_MS);
+        container.style.setProperty('--marquee-bulb-scroll-delay', scrollDelayMs.toFixed(1) + 'ms');
+        container.style.setProperty('--marquee-bulb-flicker-delay', flickerDelayMs.toFixed(1) + 'ms');
+      }
+    }
+    // Forces every element currently on the stage to abandon whatever
+    // --marquee-bulb-scroll-delay/-flicker-delay it's running with and
+    // recompute fresh under whatever mode setBulbLoop() reads RIGHT NOW —
+    // the only way Bulb Flicker Random's on/off flip can ever reach an
+    // element that's already running, since setBulbLoop() itself
+    // deliberately never touches an already-set delay otherwise.
+    function resyncAllBulbDelays() {
+      document.querySelectorAll('.obj').forEach((el) => {
+        el.style.removeProperty('--marquee-bulb-scroll-delay');
+        el.style.removeProperty('--marquee-bulb-flicker-delay');
+        setBulbLoop(el);
+      });
+    }
+    // The ring is sized against the element's CURRENT clientWidth/
+    // clientHeight (see setBulbLoop), so anything that changes those —
+    // Album Art's own scale, a stage-size change, a fresh layout push —
+    // needs to trigger a recompute. Rather than hunting down and hooking
+    // every one of those call sites individually, a ResizeObserver catches
+    // all of them uniformly — it fires on any actual box-size change
+    // regardless of what caused it. Only ever (un)observed in
+    // applyBulbFrame below; observing an already-observed element again
+    // is a harmless no-op per spec.
+    const bulbLoopResizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) setBulbLoop(entry.target);
+    });
+    // Marquee Bulbs: one universal shape — a single continuous ring of
+    // bulbs — applied via the exact same applyBulbFrame/ensureBulbLoop/
+    // setBulbLoop machinery to both every element AND #stage itself (see
+    // applyDecorativeBulbs), with no dependency on any other setting
+    // (previously Tuning/Path/Year only got bulbs when Marquee Scroll was
+    // ALSO on; that nesting is gone). Runs against every `.obj` found on
+    // the stage, built-in or not, so Album Art — the one element with no
+    // ticker for Marquee Scroll to act on — still gets the exact same
+    // ring as everything else; a setting simply does nothing wherever the
+    // element has nothing for it to do (no ticker means no scroll), not
+    // because it was excluded.
+    // frameInset (px, default 0) is only ever nonzero for #stage's own
+    // ring — see editor.html's matching comment.
+    function applyBulbFrame(el, enabled, frameInset) {
+      if (enabled) {
+        el.style.setProperty('--marquee-bulb-frame-inset', (frameInset || 0) + 'px');
+        ensureBulbLoop(el);
+        setBulbLoop(el);
+        bulbLoopResizeObserver.observe(el);
+      } else {
+        bulbLoopResizeObserver.unobserve(el);
+      }
+      el.classList.toggle('marquee-bulbs-active', !!enabled);
+    }
+    // visuals.marqueeBulbMode is a 4-way switch — see editor.html's
+    // matching comment. The boolean fallback handles a layout saved by
+    // an older version of this plugin (before the switch existed):
+    // true meant "on everywhere", i.e. what 'all' means now.
+    function applyDecorativeBulbs() {
+      const mode = typeof visuals.marqueeBulbMode === 'string'
+        ? visuals.marqueeBulbMode : (visuals.marqueeBulbs ? 'all' : 'off');
+      const elementsOn = mode === 'all' || mode === 'elements';
+      const layoutOn = mode === 'all' || mode === 'layout';
+      document.querySelectorAll('.obj').forEach((el) => applyBulbFrame(el, elementsOn));
+      // See editor.html's matching comment — #stage is already
+      // position:relative/overflow:hidden, so the same ring applies to
+      // it completely unmodified, except for one extra inward pull (a
+      // fixed constant — see MARQUEE_BULB_LAYOUT_FRAME_INSET_PX — not
+      // derived from Bulb Size or Gap, so neither slider drags the ring
+      // itself inward) so it reads as its own separate frame instead of
+      // hugging the same edge an element might be sitting flush against.
+      const stageEl = document.getElementById('stage');
+      if (stageEl) applyBulbFrame(stageEl, layoutOn, MARQUEE_BULB_LAYOUT_FRAME_INSET_PX);
+    }
+    // ============================================================
+    // Marquee Scroll Roll: resolves each element's own rollGroup/
+    // rollSlot assignment (set via each element's own settings in the
+    // editor, not any geometry) into the matching Roll element's
+    // combined ticker text. Only elements with a real ticker contribute
+    // — Album Art has no text to add. Real member elements are hidden
+    // while assigned to an existing Roll; the Roll itself is a real,
+    // user-positioned element built once (see buildRollElementDom /
+    // order.forEach in renderLayout), fed through the same
+    // setupLinkScrollTicker/setupBounceTicker every other combined
+    // ticker uses.
+    // ============================================================
+    function isLinkableElement(id) {
+      const el = document.getElementById('obj-' + id);
+      return !!(el && el.querySelector('.ticker-track'));
+    }
+    // Label survives into the combined string (e.g. "Tuning: Drop D"),
+    // matching what's already shown on-screen for that element — an
+    // element with no visible header (Song Title/Artist, Song Timer)
+    // naturally contributes just its value, nothing extra to strip.
+    // Whether `node` is hidden by something BETWEEN it and `objEl`
+    // (exclusive of objEl itself) — deliberately ignores whether objEl
+    // is hidden, since a grouped member's whole .obj is display:none
+    // from a PRIOR resolve pass by the time this runs again on a live
+    // update, and that's not a reason to treat its own value as blank.
+    // A plain offsetParent/display check on the leaf node can't tell
+    // "objEl itself is hidden" apart from "something inside objEl is
+    // intentionally hidden" (e.g. .artist when Song Title/Artist are
+    // combined, or Score's .stat-value-prev) — this walks the chain
+    // stopping at objEl specifically to tell those apart.
+    function isHiddenWithinObj(node, objEl) {
+      let n = node;
+      while (n && n !== objEl) {
+        if (getComputedStyle(n).display === 'none') return true;
+        n = n.parentElement;
+      }
+      return false;
+    }
+    function getElementLinkText(id) {
+      const el = document.getElementById('obj-' + id);
+      if (!el) return '';
+      const labelEl = el.querySelector('.stat-label');
+      const label = labelEl && !isHiddenWithinObj(labelEl, el) ? labelEl.textContent.trim() : '';
+      const parts = [];
+      el.querySelectorAll('.ticker-track').forEach((track) => {
+        if (isHiddenWithinObj(track, el)) return;
+        const copy = track.querySelector('.marquee-copy');
+        const text = (copy ? copy.textContent : track.textContent || '').trim();
+        if (text) parts.push(text);
+      });
+      const value = parts.join(' / ');
+      if (!value) return '';
+      return label ? (label + ': ' + value) : value;
+    }
+    // Same 3-star glyph cluster as the Marquee Stars flair, for the
+    // same reason it was chosen there — reads as "part of the marquee
+    // language" rather than a new visual vocabulary. Each segment
+    // effectively gets " -" appended and "- " prepended to its neighbor
+    // — written as one join separator (segments.join(...) makes " -" +
+    // "- " collide into one " -- ", not two separate pieces) rather than
+    // per-segment affixes, since that's simpler and produces the exact
+    // same result. The star cluster sits literally between the two
+    // dashes when Marquee Stars is on.
+    const MARQUEE_LINK_SEPARATOR = ' - ★ ★ ★ - ';
+    // What joins segments instead, when Marquee Stars is off — same
+    // dash structure, just without the star cluster between the dashes.
+    // No star glyphs in the text at all when off, so there's nothing to
+    // hide and nothing sized for stars that aren't there. Shared by both
+    // the plain-text (bounce/static) and styled (scroll) segment
+    // builders, so the two modes stay in sync.
+    const MARQUEE_LINK_SEPARATOR_PLAIN = ' -- ';
+    // Builds a single .marquee-copy with the real styled segments/
+    // separators (not plain text) and measures ITS actual rendered
+    // width, then clones it for every copy — mirrors
+    // setupMarqueeScrollTicker's measure-and-duplicate logic, but
+    // working in styled DOM from the start instead of measuring plain
+    // text and swapping in styled spans afterward. A plain-text
+    // measurement can differ from the styled version by a fractional
+    // px (span boundaries can affect font kerning slightly), and even a
+    // sub-pixel mismatch between --marquee-unit and each copy's REAL
+    // width shows up as a visible hitch once the loop wraps — building
+    // once and cloning guarantees every copy is pixel-identical to what
+    // was actually measured.
+    //
+    // The separator's own TEXT CONTENT is chosen here, once, at build
+    // time — not toggled after the fact via CSS — so the gap between
+    // segments is genuinely sized for whatever's actually there: the
+    // full star cluster (plus the extra breathing-room margin the
+    // .marquee-stars-active CSS adds around it) when Stars is on, or
+    // just three plain spaces at the surrounding text's own size — same
+    // as the bounce-mode separator below — when it's off. See
+    // editor.html's matching comment for the full reasoning (mirrored
+    // here).
+    function buildLinkSegmentSpan(segments) {
+      const span = document.createElement('span');
+      // marquee-link-copy — lets the generic per-gap star overlay
+      // (.marquee-copy::after) exclude this ticker: it carries a real
+      // trailing separator instead (below), so the wrap gap is never
+      // left for that overlay to fill.
+      span.className = 'marquee-copy marquee-link-copy';
+      segments.forEach((seg) => {
+        span.appendChild(document.createTextNode(seg));
+        // Appended after EVERY segment, including the last — see
+        // editor.html's matching comment — so the wrap-around gap reads
+        // as just another occurrence of the same separator instead of a
+        // visibly different (and, for the star cluster, dash-less) gap.
+        if (segments.length > 1) {
+          const sep = document.createElement('span');
+          sep.className = 'marquee-star-separator';
+          sep.textContent = visuals.marqueeSparkle ? MARQUEE_LINK_SEPARATOR : MARQUEE_LINK_SEPARATOR_PLAIN;
+          span.appendChild(sep);
+        }
+      });
+      return span;
+    }
+    function setupLinkScrollTicker(ticker, track, segments) {
+      runMarqueeScrollTicker(ticker, track, () => buildLinkSegmentSpan(segments), (referenceCopy) => {
+        // The trailing separator already provides the wrap gap's entire
+        // visual spacing itself — the flex `gap` between copies needs to
+        // add nothing on top: 0, not the separator's width. A single-
+        // segment Roll has no separator at all, so null correctly falls
+        // back to the generic gap in that case.
+        const hasSeparator = !!referenceCopy.querySelector('.marquee-star-separator');
+        return hasSeparator ? 0 : null;
+      });
+    }
+    // Marquee Roll elements are real, user-positioned canvas elements
+    // (added/placed/resized in the editor, same as a custom text box) —
+    // this doesn't create or remove them, only populates whichever
+    // already exist with the combined text of whatever real elements are
+    // currently assigned to them (via each member's own rollGroup/
+    // rollSlot fields, set from THEIR OWN settings in the editor, not
+    // any geometry). A roll with 0 or 1 assigned members still renders
+    // normally (empty, or that one member's own value) since it's a
+    // real positioned element regardless of membership count.
+    function resolveRollGroups() {
+      const groups = {};
+      Object.keys(layout).forEach((id) => {
+        if (layout[id].isRoll) return;
+        const g = layout[id].rollGroup;
+        if (!g || !layout[g] || !layout[g].isRoll) return;
+        if (layout[id].visible === false || !isLinkableElement(id)) return;
+        (groups[g] = groups[g] || []).push(id);
+      });
+
+      Object.keys(layout).forEach((rollId) => {
+        if (!layout[rollId].isRoll) return;
+        const rollEl = document.getElementById('obj-' + rollId);
+        if (!rollEl) return;
+
+        const members = (groups[rollId] || []).slice();
+        // Explicit slot number, not screen position — lower slot first;
+        // ties keep whatever order they were already found in (Object.keys
+        // order), which is stable run to run.
+        members.sort((a, b) => (layout[a].rollSlot || 0) - (layout[b].rollSlot || 0));
+
+        members.forEach((id) => {
+          const el = document.getElementById('obj-' + id);
+          if (el) el.style.display = 'none';
+        });
+
+        // Harvest each member's text AFTER hiding the OTHER members but
+        // regardless of order relative to hiding — getElementLinkText's
+        // isHiddenWithinObj check only looks INSIDE each member's own
+        // box, not at whether the box itself is hidden, so member hide
+        // order here doesn't matter (unlike the old geometric version,
+        // which had to harvest before hiding anything).
+        const segments = members.map(getElementLinkText).filter(Boolean);
+        // Only meaningful for the bounce/static branch below — scroll
+        // mode uses `segments` directly, via buildLinkSegmentSpan, which
+        // picks its own separator content the same way (see that
+        // function's own comment). Bounce mode is plain textContent,
+        // with no concept of "hidden" — whatever characters are IN it
+        // get painted, period — so using a plain spacer instead of the
+        // star separator when Stars is off is the only way "off" can
+        // mean anything here, the same reasoning buildLinkSegmentSpan
+        // follows for the styled path.
+        const linkSeparator = visuals.marqueeSparkle ? MARQUEE_LINK_SEPARATOR : MARQUEE_LINK_SEPARATOR_PLAIN;
+        const combinedText = segments.join(linkSeparator);
+
+        const track = rollEl.querySelector('.ticker-track');
+        const ticker = rollEl.querySelector('.ticker');
+        if (!track || !ticker) return;
+        // Rebuild whenever the TEXT changes, or whenever any setting
+        // that setupLinkScrollTicker/setupBounceTicker actually reads
+        // for its own measurement/duration/classes/mode changes —
+        // comparing text alone was the earlier "hitches and resets" bug
+        // (see git history); a signature combining everything those
+        // depend on covers that and two more bugs: Scroll Speed/Marquee
+        // Stars/Edge Fade changes going stale with no text change to
+        // trigger a rebuild, AND — reported live — Marquee Scroll itself
+        // toggling on/off with nothing else different (same members,
+        // same text, same speed/stars/fade) never rebuilding at all,
+        // leaving the ticker stuck rendering in whichever mode
+        // (scroll-styled vs. plain bounce) it happened to build in last,
+        // regardless of what the setting currently says.
+        const signature = [
+          combinedText,
+          visuals.marqueeScroll,
+          visuals.marqueeScrollSpeed,
+          visuals.marqueeSparkle,
+          visuals.marqueeSparkleSize,
+          visuals.marqueeEdgeFade,
+        ].join('|');
+        if (track.dataset.linkSignature !== signature) {
+          track.dataset.linkSignature = signature;
+          if (visuals.marqueeScroll && segments.length > 0) {
+            setupLinkScrollTicker(ticker, track, segments);
+          } else {
+            track.textContent = combinedText;
+            setupBounceTicker(ticker, track);
+          }
+        }
+      });
+
+      // Unassigned (or orphaned — their roll got deleted) members are
+      // shown again.
+      Object.keys(layout).forEach((id) => {
+        if (layout[id].isRoll) return;
+        const g = layout[id].rollGroup;
+        if (g && layout[g] && layout[g].isRoll) return;
+        if (layout[id].visible === false) return;
+        const el = document.getElementById('obj-' + id);
+        if (el) el.style.display = '';
+      });
+    }
     function setupAllTickers() {
-      document.querySelectorAll('.ticker').forEach(setupTicker);
+      document.querySelectorAll('.ticker').forEach((t) => {
+        if (!t.closest('.obj-roll')) setupTicker(t);
+      });
+      applyDecorativeBulbs();
+      resolveRollGroups();
     }
     window._marqueeSetupAllTickers = setupAllTickers;
     // Exposed singularly too — applyLiveState() below re-measures only the
@@ -423,6 +1452,12 @@
     // not every ticker on the page. See its own comment for why that
     // distinction matters (it's the fix for an intermittent-scrolling bug).
     window._marqueeSetupTicker = setupTicker;
+    // Same reasoning as _marqueeSetupTicker above, for Marquee Scroll
+    // Roll: applyLiveState calls just this (not the full
+    // window._marqueeSetupAllTickers) after live song-data updates, so
+    // roll groups' combined text stays current without re-running the
+    // full ticker pass on every position tick.
+    window._marqueeResolveRollGroups = resolveRollGroups;
 
     function updateCornerRounding(id) {
       const el = document.getElementById('obj-' + id);
@@ -445,7 +1480,15 @@
       if (!selector || !layout[id]) return;
       const targetEl = document.getElementById('obj-' + id);
       const caption = targetEl && targetEl.querySelector(selector);
-      if (caption) caption.textContent = layout[id].name;
+      if (!caption) return;
+      caption.textContent = layout[id].name;
+      // Only Now Playing's target is actually inside a .ticker right now
+      // (Tuning/Path/Year/Score's own .stat-label isn't) — re-run its
+      // ticker setup so a rename takes effect immediately instead of
+      // waiting for some unrelated later setupAllTickers() pass, same as
+      // applyCustomTextEdit already does for custom text.
+      const ticker = caption.closest('.ticker');
+      if (ticker) setupTicker(ticker);
     }
 
     function buildCustomElementDom(id, text) {
@@ -464,10 +1507,33 @@
       el.appendChild(textWrap);
       return el;
     }
+    // A Marquee Roll element — reuses .stat-value's styling (bold,
+    // tabular-nums) for its single ticker, same as every other value
+    // display. Its content is populated by resolveRollGroups() below,
+    // not here — this only ever builds the empty shell the FIRST time a
+    // given roll id shows up in the layout data.
+    function buildRollElementDom(id) {
+      const el = document.createElement('div');
+      el.className = 'obj obj-stat obj-roll';
+      el.id = 'obj-' + id;
+      const value = document.createElement('span');
+      value.className = 'stat-value';
+      const ticker = document.createElement('span');
+      ticker.className = 'ticker';
+      const track = document.createElement('span');
+      track.className = 'ticker-track';
+      ticker.appendChild(track);
+      value.appendChild(ticker);
+      el.appendChild(value);
+      return el;
+    }
     order.forEach((id) => {
       const pos = layout[id];
       if (pos && pos.custom && !document.getElementById('obj-' + id)) {
         stage.appendChild(buildCustomElementDom(id, pos.text || ''));
+      }
+      if (pos && pos.isRoll && !document.getElementById('obj-' + id)) {
+        stage.appendChild(buildRollElementDom(id));
       }
     });
 
@@ -480,6 +1546,9 @@
       el.style.display = pos.visible === false ? 'none' : '';
       if ('scale' in pos) {
         el.style.transform = 'scale(' + (pos.scale || 1) + ')';
+        // See --art-scale's :root comment — keeps the bulb frame's
+        // effective size correct regardless of how zoomed the art is.
+        el.style.setProperty('--art-scale', String(pos.scale || 1));
       } else {
         el.style.width = pos.width ? pos.width + 'px' : '';
         el.style.height = pos.height ? pos.height + 'px' : '';
@@ -505,9 +1574,26 @@
     if (typeof visuals.canvasBgAlpha === 'number') root.style.setProperty('--canvas-bg-alpha', String(visuals.canvasBgAlpha));
     if (visuals.font) root.style.setProperty('--font-display', '"' + visuals.font + '", "Segoe UI", Arial, sans-serif');
     if (typeof visuals.fadeSeconds === 'number') root.style.setProperty('--fade-seconds', visuals.fadeSeconds + 's');
+    // marqueeBulbSize/marqueeBulbGap drive setBulbLoop() directly (see its
+    // own comment) — no CSS custom property involved, so nothing to set
+    // here.
+    // Field is still named marqueeSparkleSize (not marqueeStarSize) —
+    // this is what's persisted in saved layout files, and renaming it
+    // would silently drop the setting for anyone with an existing save;
+    // only the CSS var/classes and the UI label moved to "star"
+    // terminology. 'px', not 'em' — see the --marquee-star-size CSS
+    // comment for why this used to render a different size on every
+    // element.
+    if (typeof visuals.marqueeSparkleSize === 'number') root.style.setProperty('--marquee-star-size', visuals.marqueeSparkleSize + 'px');
     document.body.classList.toggle('bold-active', !!visuals.bold);
 
     setupAllTickers();
+    // Forced resync, only on the exact tick Bulb Flicker Random actually
+    // flipped — every element abandons whatever delay it's currently
+    // running with and recomputes fresh under the new mode (random
+    // picks a fresh offset per element; turning it back off resyncs
+    // everyone to the shared epoch again). See resyncAllBulbDelays().
+    if (bulbFlickerRandomChanged) resyncAllBulbDelays();
   }
 
   let resizeTimer;
@@ -634,7 +1720,20 @@
     // the same one CSS transition on the shared ancestor. Content is only
     // actually replaced once a new song (or preview) genuinely arrives.
     if (song) {
-      setTextAndReticker('val-title', song.title);
+      // Marquee Scroll only: one line, "Artist - Song", in the title's
+      // own large styling, instead of two separately-scrolling lines —
+      // see the .info-combined-line CSS comment. val-artist's text stays
+      // in sync either way (cheap, and means toggling back needs no
+      // special re-fetch), only its visibility and val-title's content
+      // change with the mode.
+      const infoObj = document.getElementById('obj-info');
+      const combinedInfo = !!(lastVisuals && lastVisuals.marqueeScroll);
+      if (infoObj) infoObj.classList.toggle('info-combined-line', combinedInfo);
+      if (combinedInfo) {
+        setTextAndReticker('val-title', [song.artist, song.title].filter((s) => s).join(' - '));
+      } else {
+        setTextAndReticker('val-title', song.title);
+      }
       setTextAndReticker('val-artist', song.artist);
       setTextAndReticker('val-tuning', abbreviateTuning(song.tuning));
       setTextAndReticker('val-path', song.path);
@@ -694,6 +1793,7 @@
         // setTextAndReticker('val-prev', ' ');
       }
     }
+    if (window._marqueeResolveRollGroups) window._marqueeResolveRollGroups();
   }
 
   // ── confetti — ported from the editor's own
