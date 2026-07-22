@@ -472,20 +472,7 @@
     border-width: var(--border-width);
     border-style: solid;
     border-color: rgb(var(--accent-rgb) / 0.5);
-    /* Each corner only rounds if THIS element is actually sitting flush in
-       that corner of the canvas — --corner-tl/tr/br/bl are 0/1 flags kept
-       live by updateCornerRounding() in the script (drag, resize, and
-       whole-canvas resize all recompute them), so an element merely
-       touching one edge (not a full corner) or sitting in the middle of
-       the canvas stays sharp-cornered, while one that IS in a corner
-       blends into the canvas's own rounding instead of poking a hard
-       corner past it. Order is TL TR BR BL, standard border-radius
-       shorthand order. */
-    border-radius:
-      calc(var(--edge-rounding) * var(--corner-tl, 0))
-      calc(var(--edge-rounding) * var(--corner-tr, 0))
-      calc(var(--edge-rounding) * var(--corner-br, 0))
-      calc(var(--edge-rounding) * var(--corner-bl, 0));
+    border-radius: var(--edge-rounding);
     box-shadow: 0 10px 24px -12px rgba(0, 0, 0, calc(var(--chip-alpha) * 0.75));
     backdrop-filter: blur(calc(var(--chip-alpha) * 6px));
     /* Was 8px 12px, then 3px — reduced further to 1px, as tight as
@@ -1109,6 +1096,30 @@
     -webkit-text-stroke: 0.5px currentColor;
     paint-order: stroke fill;
   }
+  /* Per-element Bold override (see applyElementStyleOverrides/
+     setElementOverride) — Bold is the one override setting that can't
+     just be a CSS custom property like accent/font/border/rounding are,
+     since the global version is a body-level class reaching every .obj
+     through a descendant selector, not an inherited variable an inline
+     style can cleanly out-rank. These two classes go directly on the
+     overridden .obj itself instead, same specificity (0,2,0) as the
+     global .bold-active .obj rule above — declared AFTER it here so
+     source order is what wins regardless of whether body.bold-active is
+     set or not, in either direction (forcing bold on where global is
+     off, or off where global is on). */
+  .obj.style-override-bold-on,
+  .obj.style-override-bold-on * {
+    font-weight: 900 !important;
+    font-synthesis: weight !important;
+    -webkit-text-stroke: 0.5px currentColor;
+    paint-order: stroke fill;
+  }
+  .obj.style-override-bold-off,
+  .obj.style-override-bold-off * {
+    font-weight: normal !important;
+    font-synthesis: none !important;
+    -webkit-text-stroke: 0 !important;
+  }
   /* Top-right "x" on every element (built-in and custom) — toggles the
      element off (same as unchecking it in the Elements list), NOT a
      delete. Custom text still has real deletion, but only via its own
@@ -1155,6 +1166,52 @@
     gap: 14px;
   }
   .panel-title { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; margin: 0; }
+  /* Global/Customize split for the Visual Settings panel — see the HTML
+     comment above .settings-tabs for the split's own reasoning. Plain
+     underline-style tabs, not pills, so they read as "which page of this
+     panel" rather than competing visually with the pill toggles/buttons
+     elsewhere in the toolbar. */
+  .settings-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid rgba(243, 233, 216, 0.14);
+    margin: -4px 0 4px;
+  }
+  .settings-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--paper-dim);
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 6px 4px 8px;
+    cursor: pointer;
+  }
+  .settings-tab:hover { color: var(--paper); }
+  .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  /* One row per OVERRIDABLE_SETTINGS entry, built in
+     renderCustomizeSettingRows() — label, then the control itself.
+     Whether the control is live or just mirroring Global (disabled) is
+     gated ONCE, by the single Enable Customizations toggle above the
+     list — see customizeEnableToggle — not per row. */
+  .customize-setting-row { display: flex; align-items: center; gap: 10px; }
+  .customize-setting-row label { flex: 1; min-width: 0; }
+  .customize-setting-row .control-cell { flex: none; display: flex; align-items: center; gap: 6px; }
+  /* :not([type=checkbox]) matters here: a checkbox row's real input is
+     the switch's hidden native checkbox (.switch input, opacity:0 — see
+     that rule). This block's ONLY job elsewhere is dimming disabled
+     controls, but since .customize-setting-row .control-cell input's
+     specificity (0,2,1) beats .switch input's (0,1,1), an unqualified
+     `opacity: 1` here was clobbering the switch's own opacity:0 and
+     exposing the raw checkbox on top of the fake track/thumb — reported
+     live as "toggle buttons became checkboxes". The switch wrapper
+     itself (.switch, not its input) gets the dimming instead below. */
+  .customize-setting-row .control-cell input:not([type=checkbox]),
+  .customize-setting-row .control-cell select { opacity: 1; transition: opacity .15s; }
+  .customize-setting-row .control-cell input:disabled:not([type=checkbox]),
+  .customize-setting-row .control-cell select:disabled { opacity: 0.45; }
+  .customize-setting-row .control-cell .switch { transition: opacity .15s; }
+  .customize-setting-row .control-cell .switch.is-disabled { opacity: 0.45; }
   /* Reported live: with justify-content:space-between spreading a short
      label all the way from a short control across the panel's full
      width, it was hard to tell at a glance which control belonged to
@@ -1704,6 +1761,17 @@
        — pointer-events:none. -->
   <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas></div><div class="panel">
   <p class="panel-title">VISUAL SETTINGS:</p>
+  <!-- Global applies to every element identically, exactly like this
+       whole panel always has. Customize is per-element: pick one element
+       from its own dropdown, then flip individual settings' own
+       Customize toggle to give THAT element its own value instead of
+       inheriting Global — see OVERRIDABLE_SETTINGS (JS) for the exact
+       list and buildCustomizeTab() for how the tab's rows get built. -->
+  <div class="settings-tabs" role="tablist">
+    <button type="button" class="settings-tab active" id="settingsTabGlobalBtn" role="tab" aria-selected="true" aria-controls="globalSettingsTab">Global</button>
+    <button type="button" class="settings-tab" id="settingsTabCustomizeBtn" role="tab" aria-selected="false" aria-controls="customizeSettingsTab">Customize</button>
+  </div>
+  <div id="globalSettingsTab" role="tabpanel">
   <div class="control-row">
     <label for="stageWidth">Layout Size:</label>
     <div class="font-picker-row">
@@ -1919,7 +1987,34 @@
       </span>
       <span class="unit">%</span>
     </div>
-  </div></div><div class="panel">
+  </div>
+  </div>
+  <!-- Built entirely by JS (buildCustomizeTab) from OVERRIDABLE_SETTINGS
+       — no hand-written per-setting markup here, so adding a setting to
+       that array is the only step needed to add its row. Hidden by
+       default; the tab-switch handler toggles which of
+       globalSettingsTab/customizeSettingsTab is visible. -->
+  <div id="customizeSettingsTab" role="tabpanel" style="display:none">
+    <div class="control-row inline">
+      <label for="customizeElementSelect">Element:</label>
+      <select id="customizeElementSelect" aria-label="Which element's settings to customize"></select>
+      <button class="load-fonts-btn" id="customizeResetBtn" type="button" title="Discard every custom value for this one element, back to Global">Reset to Global</button>
+    </div>
+    <!-- The ONE flag deciding Global vs. this element's own values —
+         every row below is disabled/mirrors Global while this is off,
+         same "grayed out, showing what it'd inherit" treatment either
+         way, just gated once here instead of per row. -->
+    <div class="control-row">
+      <label for="customizeEnableToggle">Enable Customizations:</label>
+      <span class="switch">
+        <input type="checkbox" id="customizeEnableToggle" aria-label="Use this element's own custom settings instead of Global" />
+        <span class="track"></span>
+        <span class="thumb"></span>
+      </span>
+    </div>
+    <div id="customizeSettingsRows"></div>
+  </div>
+  </div><div class="panel">
   <p class="panel-title">Element settings: Re-order for layering, change header text, adjust font size, and toggle off the element:</p>
   <div class="element-toggles" id="elementToggles"></div></div><div class="panel">
   <p class="panel-title">Marquee Scroll Roll: add a banner element below, then assign other elements to it via their own "Marquee Roll" setting above to merge their text into one scrolling banner:</p>
@@ -2075,6 +2170,217 @@
   // delete paths.
   const defaultElementOrder = Object.keys(defaultLayout);
   let elementOrder = [...defaultElementOrder];
+  // ============================================================
+  // Per-element visual overrides — lets ONE element look/behave
+  // differently from the rest without a separate global setting for
+  // every combination. Two fields per element, both on layout[id]:
+  // `useCustomStyles` (boolean) is the ONE flag deciding whether this
+  // element uses its own values or Global's — a single element-wide
+  // switch, not a per-setting one (an earlier version had a Customize
+  // toggle on every individual row; reported live as unwanted — this
+  // replaces that). `styleOverrides` is where those custom values
+  // actually live, populated once (seeded as an exact copy of whatever
+  // Global had at that moment — see enableElementCustomization) the
+  // first time customization is turned on, and then left alone when
+  // it's turned back off — so toggling off and back on restores the
+  // same customization instead of losing it. Only "Reset to Global"
+  // (see resetElementToGlobal) actually clears it.
+  // Scope (2026-07-21, expanded from an initial narrower list): every
+  // Global setting that's conceptually about ONE element. Deliberately
+  // excludes Layout Size and Background Color/Transparency (both are
+  // about the shared canvas itself — there's no such thing as one
+  // element's own canvas size or background layer) and Confetti/Fade
+  // Out Time (whole-overlay effects, not tied to any element). Marquee
+  // Bulbs' global control is a 4-way "which AREAS" switch (Off/All/
+  // Elements/Layout) that has no per-element equivalent, so its
+  // per-element override is a plain on/off instead (see marqueeBulbs
+  // below and its own fallback in getEffectiveVisualsFor) — the
+  // decided answer for what it means to override: it can force bulbs
+  // on for this one element even when the global mode wouldn't
+  // otherwise include Elements at all. marqueeBulbSpeedLayout is
+  // excluded — inherently about the LAYOUT ring, not any element's.
+  // marqueeBulbFlickerRandom IS included, but means something narrower
+  // than the global version: off (the default, matching Global) keeps
+  // this element's flicker phase-locked to the same shared epoch every
+  // other non-random element uses, so it visually reads as "following
+  // global timing" even while its other flicker settings (on/off,
+  // intensity) are independently overridden; on gives this ONE element
+  // its own freshly-randomized phase without pulling every other
+  // element into random mode too (see setBulbLoop's own comment).
+  const OVERRIDABLE_SETTINGS = [
+    { key: 'chipColor', label: 'Element Color/Transparency', type: 'coloralpha', alphaKey: 'chipAlpha' },
+    { key: 'accent', label: 'Accent Color', type: 'color' },
+    { key: 'bold', label: 'Bold Text', type: 'checkbox' },
+    { key: 'font', label: 'Element Font', type: 'font' },
+    { key: 'borderWidth', label: 'Border Thickness', type: 'range', min: 0, max: 6, step: 1 },
+    { key: 'edgeRounding', label: 'Edge Rounding', type: 'range', min: 0, max: 20, step: 1 },
+    { key: 'elementHeadSize', label: 'Element Header Text Size', type: 'range', min: 6, max: 160, step: 1 },
+    { key: 'marqueeScroll', label: 'Marquee Scroll', type: 'checkbox' },
+    { key: 'marqueeScrollSpeed', label: 'Marquee Scroll Speed', type: 'range', min: 10, max: 300, step: 10 },
+    { key: 'marqueeEdgeFade', label: 'Marquee Edge Fade', type: 'checkbox' },
+    { key: 'marqueeSparkle', label: 'Marquee Stars', type: 'checkbox' },
+    { key: 'marqueeSparkleSize', label: 'Marquee Star Size', type: 'range', min: 4, max: 64, step: 1 },
+    { key: 'marqueeBulbs', label: 'Marquee Bulbs', type: 'checkbox' },
+    { key: 'marqueeBulbSize', label: 'Marquee Bulb Size', type: 'range', min: 1.5, max: 55, step: 0.5 },
+    { key: 'marqueeBulbGap', label: 'Marquee Bulb Gap', type: 'range', min: 5, max: 60, step: 1 },
+    { key: 'marqueeBulbSpeedElements', label: 'Marquee Bulb Speed', type: 'range', min: 10, max: 300, step: 10 },
+    { key: 'marqueeBulbScroll', label: 'Marquee Bulb Scroll', type: 'checkbox' },
+    { key: 'marqueeBulbFlicker', label: 'Marquee Bulb Flicker', type: 'checkbox' },
+    { key: 'marqueeBulbFlickerIntensity', label: 'Marquee Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05 },
+    { key: 'marqueeBulbFlickerRandom', label: 'Marquee Bulb Flicker Random', type: 'checkbox' },
+  ];
+  // What a key falls back to when this element ISN'T customized (or
+  // customized but that particular key was added to OVERRIDABLE_SETTINGS
+  // after this element last had customization enabled) — global, except
+  // marqueeBulbs, which has no direct global counterpart (see the scope
+  // comment above): derived from whether the global mode currently
+  // includes Elements at all.
+  function globalFallbackFor(key) {
+    if (key === 'marqueeBulbs') return visuals.marqueeBulbMode === 'all' || visuals.marqueeBulbMode === 'elements';
+    return visuals[key];
+  }
+  // The single source of truth every override-aware code path reads
+  // from instead of `visuals` directly. Every OVERRIDABLE_SETTINGS key
+  // is present on the returned object, so callers never need their own
+  // fallback logic.
+  function getEffectiveVisualsFor(id) {
+    const useCustom = !!(layout[id] && layout[id].useCustomStyles);
+    const ov = (useCustom && layout[id].styleOverrides) || {};
+    const eff = {};
+    OVERRIDABLE_SETTINGS.forEach(({ key }) => {
+      eff[key] = Object.prototype.hasOwnProperty.call(ov, key) ? ov[key] : globalFallbackFor(key);
+    });
+    return eff;
+  }
+  // Sets/clears the CSS custom properties + bold class this element's
+  // customization state actually needs — the style-only keys (chipColor/
+  // Alpha, accent, font, border, rounding, elementHeadSize) are already
+  // custom-property-driven globally (see :root), so setting the SAME
+  // property directly on this element's own inline style is enough to
+  // win over the inherited :root value for its whole subtree, no new CSS
+  // needed. Bold is the one exception — the global version is a
+  // body-level class reaching every .obj via a descendant selector,
+  // which an inline style can't override cleanly, so it gets its own
+  // pair of scoped classes instead (see the CSS comment above
+  // .obj.style-override-bold-on). The ticker-behavior and bulb keys
+  // aren't CSS-driven at all — they only take effect the next time this
+  // element's own ticker(s)/bulb ring rebuild (see setupTicker/
+  // applyDecorativeBulbs, both keyed off getEffectiveVisualsFor), not
+  // here.
+  function applyElementStyleOverrides(id) {
+    const el = document.getElementById('obj-' + id);
+    if (!el) return;
+    const useCustom = !!(layout[id] && layout[id].useCustomStyles);
+    const ov = (useCustom && layout[id].styleOverrides) || {};
+    if ('chipColor' in ov) {
+      el.style.setProperty('--chip-rgb', ov.chipRgb || hexToRgbChannels(ov.chipColor));
+      el.style.setProperty('--chip-alpha', String(typeof ov.chipAlpha === 'number' ? ov.chipAlpha : 1));
+    } else {
+      el.style.removeProperty('--chip-rgb');
+      el.style.removeProperty('--chip-alpha');
+    }
+    if ('accent' in ov) {
+      el.style.setProperty('--accent', ov.accent);
+      el.style.setProperty('--accent-rgb', ov.accentRgb || hexToRgbChannels(ov.accent));
+    } else {
+      el.style.removeProperty('--accent');
+      el.style.removeProperty('--accent-rgb');
+    }
+    if ('borderWidth' in ov) {
+      el.style.setProperty('--border-width', ov.borderWidth + 'px');
+    } else {
+      el.style.removeProperty('--border-width');
+    }
+    if ('edgeRounding' in ov) {
+      el.style.setProperty('--edge-rounding', ov.edgeRounding + 'px');
+    } else {
+      el.style.removeProperty('--edge-rounding');
+    }
+    if ('elementHeadSize' in ov) {
+      el.style.setProperty('--element-head-size', ov.elementHeadSize + 'px');
+    } else {
+      el.style.removeProperty('--element-head-size');
+    }
+    if ('marqueeSparkleSize' in ov) {
+      el.style.setProperty('--marquee-star-size', ov.marqueeSparkleSize + 'px');
+    } else {
+      el.style.removeProperty('--marquee-star-size');
+    }
+    if ('font' in ov) {
+      el.style.setProperty('--font-display', `"${ov.font}", 'Segoe UI', Arial, sans-serif`);
+    } else {
+      el.style.removeProperty('--font-display');
+    }
+    el.classList.toggle('style-override-bold-on', 'bold' in ov && ov.bold === true);
+    el.classList.toggle('style-override-bold-off', 'bold' in ov && ov.bold === false);
+  }
+  function applyAllElementStyleOverrides() {
+    Object.keys(layout).forEach(applyElementStyleOverrides);
+  }
+  // Turns customization ON for this element. Seeds styleOverrides as an
+  // exact copy of whatever's currently effective (Global, or the
+  // fallback derivation for marqueeBulbs) for every key NOT already
+  // present — so the Customize tab starts out looking identical to
+  // Global, not blank/defaulted, and re-enabling after a previous
+  // Disable restores exactly what was there before rather than
+  // re-seeding over it.
+  function enableElementCustomization(id) {
+    if (!layout[id]) return;
+    layout[id].useCustomStyles = true;
+    if (!layout[id].styleOverrides) layout[id].styleOverrides = {};
+    const ov = layout[id].styleOverrides;
+    OVERRIDABLE_SETTINGS.forEach(({ key }) => {
+      if (!(key in ov)) ov[key] = globalFallbackFor(key);
+    });
+    if ('accent' in ov) ov.accentRgb = hexToRgbChannels(ov.accent);
+    if ('chipColor' in ov) ov.chipRgb = hexToRgbChannels(ov.chipColor);
+    applyElementStyleOverrides(id);
+    applyDecorativeBulbs();
+    setupAllTickers();
+    // This element's effective Bulb Flicker Random may have just changed
+    // (Global's value vs. whatever got seeded/restored into ov) — see
+    // resyncElementBulbDelay's own comment.
+    resyncElementBulbDelay(id);
+  }
+  // Turns customization OFF without discarding the values — flipping
+  // back on (above) restores them rather than starting from scratch.
+  // resetElementToGlobal below is the actual hard clear.
+  function disableElementCustomization(id) {
+    if (!layout[id]) return;
+    layout[id].useCustomStyles = false;
+    applyElementStyleOverrides(id);
+    applyDecorativeBulbs();
+    setupAllTickers();
+    resyncElementBulbDelay(id);
+  }
+  function setElementOverrideValue(id, key, value) {
+    if (!layout[id] || !layout[id].styleOverrides) return;
+    layout[id].styleOverrides[key] = value;
+    if (key === 'accent') layout[id].styleOverrides.accentRgb = hexToRgbChannels(value);
+    if (key === 'chipColor') layout[id].styleOverrides.chipRgb = hexToRgbChannels(value);
+    applyElementStyleOverrides(id);
+    applyDecorativeBulbs();
+    setupAllTickers();
+    // Only this one setting needs a delay resync — see
+    // resyncElementBulbDelay's own comment on why every other override
+    // deliberately does NOT perturb an already-running element's phase.
+    if (key === 'marqueeBulbFlickerRandom') resyncElementBulbDelay(id);
+  }
+  // The Customize tab's own "Reset to Global" button — a hard clear:
+  // turns customization off AND discards every stored value for this
+  // ONE element, distinct from the global Reset to Defaults button
+  // (which wipes everything, every element, back to the selected
+  // preset's baked-in state, overrides included) and from
+  // disableElementCustomization above (which keeps the values around).
+  function resetElementToGlobal(id) {
+    if (!layout[id]) return;
+    layout[id].useCustomStyles = false;
+    delete layout[id].styleOverrides;
+    applyElementStyleOverrides(id);
+    applyDecorativeBulbs();
+    setupAllTickers();
+    resyncElementBulbDelay(id);
+  }
   // Presets — each has two snapshots:
   // - default: fixed, only ever changed by editing this object in code.
   // Reset to Defaults always restores THIS, discarding whatever's been
@@ -2884,12 +3190,6 @@
   // of the configured canvas size. Keep in sync with .stage-grid's
   // background-size below — they're not programmatically linked.
   const GRID_DIVISIONS = 20;
-  // How close (in real/rendered px) an element's edge needs to be to the
-  // stage's matching edge to count as "touching" for corner-rounding
-  // purposes (see updateCornerRounding). Small — this is meant to catch
-  // genuinely flush placement (e.g. via the edge-snap above), not "close
-  // enough," so a corner doesn't round while it visibly still has a gap.
-  const EDGE_TOUCH_EPSILON_PX = 2;
   // Import hardening — a layout file may come from anywhere (shared by
   // another streamer, an old backup, a hand-edited file), so it's treated
   // as untrusted input, not just malformed-JSON input. Every value pulled
@@ -2990,31 +3290,6 @@
   // ============================================================
   // 3. Render / apply — pushes `layout` state onto the DOM
   // ============================================================
-  // Sets the four --corner-tl/tr/br/bl flags (see .obj's border-radius)
-  // for one element, based on whether ITS edges are actually flush with
-  // the STAGE's matching edges right now — measured live via
-  // getBoundingClientRect() (real/rendered space, so this is correct
-  // regardless of zoom), same epsilon-tolerance pattern as the snap
-  // helpers above. A corner only counts if BOTH edges meeting there are
-  // touching — an element flush against just one side (not sitting in an
-  // actual corner) gets no rounding from this at all.
-  function updateCornerRounding(id) {
-    const el = document.getElementById('obj-' + id);
-    if (!el || !layout[id] || layout[id].visible === false) return;
-    const stageRect = stage.getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    const touchesLeft = (r.left - stageRect.left) <= EDGE_TOUCH_EPSILON_PX;
-    const touchesTop = (r.top - stageRect.top) <= EDGE_TOUCH_EPSILON_PX;
-    const touchesRight = (stageRect.right - r.right) <= EDGE_TOUCH_EPSILON_PX;
-    const touchesBottom = (stageRect.bottom - r.bottom) <= EDGE_TOUCH_EPSILON_PX;
-    el.style.setProperty('--corner-tl', (touchesLeft && touchesTop) ? '1' : '0');
-    el.style.setProperty('--corner-tr', (touchesRight && touchesTop) ? '1' : '0');
-    el.style.setProperty('--corner-br', (touchesRight && touchesBottom) ? '1' : '0');
-    el.style.setProperty('--corner-bl', (touchesLeft && touchesBottom) ? '1' : '0');
-  }
-  function updateAllCornerRounding() {
-    Object.keys(layout).forEach(updateCornerRounding);
-  }
   function applyLayout() {
     for (const [id, pos] of Object.entries(layout)) {
       const el = document.getElementById('obj-' + id);
@@ -3044,11 +3319,13 @@
         el.style.fontSize = (pos.fontSize || 16) + 'px';
       }
     }
-    // Separate pass, after every element's position/size is written —
-    // querying getBoundingClientRect() (inside updateAllCornerRounding)
-    // interleaved with the style writes above would force a layout
-    // recalculation on every single iteration instead of once here.
-    updateAllCornerRounding();
+    // Re-applies every element's own per-element overrides (see
+    // applyElementStyleOverrides) — needed here, not just at the moment
+    // an override is set, because applyLayout() is also what runs after
+    // a fresh DOM element gets created (preset load, import, Add Roll,
+    // ...), and a freshly-created element's inline style starts empty
+    // regardless of what its layout[id].styleOverrides already says.
+    applyAllElementStyleOverrides();
     renderJson();
   }
   // Stacking order: index 0 in elementOrder gets the highest z-index (on
@@ -3194,6 +3471,49 @@
     function importedRollGroup(entry) {
       return (typeof entry.rollGroup === 'string' && rollIdMap[entry.rollGroup]) ? rollIdMap[entry.rollGroup] : null;
     }
+    // Per-element override sanitizer — same untrusted-input posture as
+    // everything else here: every OVERRIDABLE_SETTINGS key is checked
+    // against its own type before being trusted, anything else in the
+    // raw object (unknown keys, wrong types) is silently dropped rather
+    // than trusted through. Returns undefined (not an empty object) when
+    // there's nothing valid to keep, preserving the sparse-only-when-
+    // actually-overridden convention setElementOverride/
+    // getEffectiveVisualsFor both rely on.
+    function importedStyleOverrides(entry) {
+      const raw = entry.styleOverrides;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+      const out = {};
+      OVERRIDABLE_SETTINGS.forEach(({ key, type, min, max, alphaKey }) => {
+        if (type === 'coloralpha') {
+          // chipColor/chipAlpha — the one setting with two raw fields
+          // instead of one, same color+alpha pairing chipColor/chipAlpha
+          // already have globally.
+          if (key in raw && typeof raw[key] === 'string' && HEX_COLOR_RE.test(raw[key])) {
+            out[key] = raw[key];
+            out.chipRgb = hexToRgbChannels(raw[key]);
+          }
+          if (alphaKey in raw && typeof raw[alphaKey] === 'number' && Number.isFinite(raw[alphaKey])) {
+            out[alphaKey] = clamp(raw[alphaKey], 0, 1);
+          }
+          return;
+        }
+        if (!(key in raw)) return;
+        if (type === 'color') {
+          if (typeof raw[key] === 'string' && HEX_COLOR_RE.test(raw[key])) {
+            out[key] = raw[key];
+            out.accentRgb = hexToRgbChannels(raw[key]);
+          }
+        } else if (type === 'checkbox') {
+          if (typeof raw[key] === 'boolean') out[key] = raw[key];
+        } else if (type === 'font') {
+          const font = sanitizeString(raw[key], '', MAX_FONT_NAME_LENGTH);
+          if (font) out[key] = font;
+        } else if (type === 'range') {
+          if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) out[key] = clamp(raw[key], min, max);
+        }
+      });
+      return Object.keys(out).length ? out : undefined;
+    }
     let customCreated = 0;
     importOrder.forEach((importId) => {
       const entry = data.elements[importId];
@@ -3213,6 +3533,9 @@
           rollGroup: importedRollGroup(entry),
           rollSlot: sanitizeNumber(entry.rollSlot, 1, 1, 999),
         };
+        const builtInOverrides = importedStyleOverrides(entry);
+        if (builtInOverrides) sanitized.styleOverrides = builtInOverrides;
+        sanitized.useCustomStyles = sanitizeBoolean(entry.useCustomStyles, false);
         if ('scale' in base) {
           sanitized.scale = sanitizeNumber(entry.scale, base.scale, MIN_SCALE, MAX_SCALE);
         } else {
@@ -3237,6 +3560,9 @@
           isRoll: true,
           name,
         };
+        const rollOverrides = importedStyleOverrides(entry);
+        if (rollOverrides) newLayout[id].styleOverrides = rollOverrides;
+        newLayout[id].useCustomStyles = sanitizeBoolean(entry.useCustomStyles, false);
         wireObject(el);
         newOrder.push(id);
       } else if (entry.custom === true && customCreated < MAX_CUSTOM_ELEMENTS) {
@@ -3258,6 +3584,9 @@
           custom: true,
           text,
         };
+        const customOverrides = importedStyleOverrides(entry);
+        if (customOverrides) newLayout[id].styleOverrides = customOverrides;
+        newLayout[id].useCustomStyles = sanitizeBoolean(entry.useCustomStyles, false);
         wireObject(el);
         newOrder.push(id);
       }
@@ -3596,7 +3925,13 @@
   // after it) catches whatever sub-pixel drift remains after the
   // initial synchronous measurement — cheap insurance against exactly
   // that class of bug for every scrolling ticker, not just Roll's.
-  function runMarqueeScrollTicker(ticker, track, buildCopy, gapPxFn) {
+  function runMarqueeScrollTicker(ticker, track, buildCopy, gapPxFn, eff) {
+    // eff is the EFFECTIVE settings for whichever element this ticker
+    // belongs to (global visuals merged with that element's own
+    // styleOverrides, see getEffectiveVisualsFor) — defaults to plain
+    // global visuals for any caller that doesn't know about per-element
+    // overrides at all.
+    eff = eff || visuals;
     ticker.classList.remove('is-overflowing');
     track.style.removeProperty('--ticker-shift');
     track.style.removeProperty('animation-duration');
@@ -3613,7 +3948,7 @@
     // before either class is on gives a reference width that doesn't
     // match what actually renders.
     ticker.classList.add('marquee-scroll-active');
-    ticker.classList.toggle('marquee-stars-active', !!visuals.marqueeSparkle);
+    ticker.classList.toggle('marquee-stars-active', !!eff.marqueeSparkle);
     track.textContent = '';
     const referenceCopy = buildCopy();
     track.appendChild(referenceCopy);
@@ -3652,8 +3987,8 @@
     for (let i = 0; i < copiesNeeded; i++) {
       track.appendChild(buildCopy());
     }
-    const speed = (typeof visuals.marqueeScrollSpeed === 'number' && visuals.marqueeScrollSpeed > 0)
-      ? visuals.marqueeScrollSpeed : MARQUEE_SCROLL_PX_PER_SEC_DEFAULT;
+    const speed = (typeof eff.marqueeScrollSpeed === 'number' && eff.marqueeScrollSpeed > 0)
+      ? eff.marqueeScrollSpeed : MARQUEE_SCROLL_PX_PER_SEC_DEFAULT;
     track.style.setProperty('--marquee-gap', gapPx + 'px');
     track.style.setProperty('--marquee-unit', unit + 'px');
     track.style.setProperty('--marquee-duration', Math.max(0.5, unit / speed).toFixed(2) + 's');
@@ -3666,7 +4001,7 @@
     ticker.classList.remove('marquee-scroll-active');
     void track.offsetWidth;
     ticker.classList.add('marquee-scroll-active');
-    ticker.classList.toggle('marquee-edge-fade-active', !!visuals.marqueeEdgeFade);
+    ticker.classList.toggle('marquee-edge-fade-active', !!eff.marqueeEdgeFade);
     // marquee-stars-active was already set above, before measurement.
     // Marquee Bulbs is handled separately, once per element (not per
     // ticker) — see applyDecorativeBulbs()/applyBulbFrame — so every
@@ -3703,21 +4038,24 @@
     span.textContent = text;
     return span;
   }
-  function setupMarqueeScrollTicker(ticker, track) {
+  function setupMarqueeScrollTicker(ticker, track, eff) {
     const originalText = resetTrackToPlainText(track);
-    runMarqueeScrollTicker(ticker, track, () => buildPlainScrollCopy(originalText));
+    runMarqueeScrollTicker(ticker, track, () => buildPlainScrollCopy(originalText), null, eff);
   }
   // Every ticker obeys Marquee Scroll — no per-element exceptions, no
   // eligibility check: any element with a ticker gets it the moment the
-  // setting is on. Album Art is the only element with no ticker at all
-  // (it's an image, nothing to scroll) — it simply never reaches this
-  // function in the first place, since setupAllTickers only calls it
-  // for what querySelectorAll('.ticker') actually finds.
+  // setting is on (or that element's own override says on — see
+  // getEffectiveVisualsFor). Album Art is the only element with no
+  // ticker at all (it's an image, nothing to scroll) — it simply never
+  // reaches this function in the first place, since setupAllTickers only
+  // calls it for what querySelectorAll('.ticker') actually finds.
   function setupTicker(ticker) {
     const track = ticker.querySelector('.ticker-track');
     if (!track) return;
-    if (visuals.marqueeScroll) {
-      setupMarqueeScrollTicker(ticker, track);
+    const objEl = ticker.closest('.obj');
+    const eff = objEl ? getEffectiveVisualsFor(objEl.dataset.id) : visuals;
+    if (eff.marqueeScroll) {
+      setupMarqueeScrollTicker(ticker, track, eff);
     } else {
       setupBounceTicker(ticker, track);
     }
@@ -3739,7 +4077,7 @@
   function applyInfoLineMode() {
     const infoObj = document.getElementById('obj-info');
     if (!infoObj || !INFO_TITLE_TRACK) return;
-    const combined = !!visuals.marqueeScroll;
+    const combined = !!getEffectiveVisualsFor('info').marqueeScroll;
     infoObj.classList.toggle('info-combined-line', combined);
     INFO_TITLE_TRACK.textContent = combined
       ? [INFO_ORIGINAL_ARTIST, INFO_ORIGINAL_TITLE].filter((s) => s).join(' - ')
@@ -3791,7 +4129,13 @@
   // direction (see the CSS) doesn't disturb this — a periodic
   // animation visits the same positions over one cycle regardless of
   // which way it plays, so the alignment holds either way.
-  function setBulbLoop(container) {
+  function setBulbLoop(container, eff) {
+    // eff is #stage for the layout ring (always null/global — there's no
+    // per-element concept for it) or the calling element's own
+    // getEffectiveVisualsFor() result; falls back to plain global visuals
+    // for any caller (e.g. a stale ResizeObserver tick before this param
+    // existed) that doesn't pass one.
+    const src = eff || visuals;
     const top = container.querySelector(':scope > .marquee-bulb-edge-top');
     const right = container.querySelector(':scope > .marquee-bulb-edge-right');
     const bottom = container.querySelector(':scope > .marquee-bulb-edge-bottom');
@@ -3801,10 +4145,10 @@
     const rightFill = right.querySelector('.marquee-bulb-edge-fill');
     const bottomFill = bottom.querySelector('.marquee-bulb-edge-fill');
     const leftFill = left.querySelector('.marquee-bulb-edge-fill');
-    const bulbSize = (typeof visuals.marqueeBulbSize === 'number' && visuals.marqueeBulbSize > 0)
-      ? visuals.marqueeBulbSize : MARQUEE_BULB_SIZE_DEFAULT;
-    const bulbGap = (typeof visuals.marqueeBulbGap === 'number' && visuals.marqueeBulbGap >= 0)
-      ? visuals.marqueeBulbGap : MARQUEE_BULB_GAP_DEFAULT;
+    const bulbSize = (typeof src.marqueeBulbSize === 'number' && src.marqueeBulbSize > 0)
+      ? src.marqueeBulbSize : MARQUEE_BULB_SIZE_DEFAULT;
+    const bulbGap = (typeof src.marqueeBulbGap === 'number' && src.marqueeBulbGap >= 0)
+      ? src.marqueeBulbGap : MARQUEE_BULB_GAP_DEFAULT;
     // Album Art is the one element whose OWN box gets CSS transform:
     // scale()'d (see applyLayout) — dividing by that same scale here,
     // in JS, is what keeps its bulbs visually the same size as every
@@ -3856,13 +4200,15 @@
     rightFill.style.setProperty('--marquee-bulb-phase', wrap(-rectW).toFixed(2) + 'px');
     bottomFill.style.setProperty('--marquee-bulb-phase', wrap(2 * rectW + rectH).toFixed(2) + 'px');
     leftFill.style.setProperty('--marquee-bulb-phase', '0px');
-    // #stage's own ring reads visuals.marqueeBulbSpeedLayout, every
-    // other container (every real element) reads
-    // visuals.marqueeBulbSpeedElements — two independent sliders (see
-    // MARQUEE_BULB_SPEED_DEFAULT's own comment for why), neither tied to
-    // Marquee Scroll Speed (text-only now) anymore.
+    // #stage's own ring always reads plain global visuals.
+    // marqueeBulbSpeedLayout (there's no per-element concept for the
+    // layout ring's own speed); every other container (every real
+    // element) reads its own EFFECTIVE marqueeBulbSpeedElements —
+    // independent sliders (see MARQUEE_BULB_SPEED_DEFAULT's own
+    // comment for why), neither tied to Marquee Scroll Speed (text-only
+    // now) anymore.
     const bulbSpeedSetting = container.id === 'stage'
-      ? visuals.marqueeBulbSpeedLayout : visuals.marqueeBulbSpeedElements;
+      ? visuals.marqueeBulbSpeedLayout : src.marqueeBulbSpeedElements;
     const speed = (typeof bulbSpeedSetting === 'number' && bulbSpeedSetting > 0)
       ? bulbSpeedSetting : MARQUEE_BULB_SPEED_DEFAULT;
     // tile, not size+gap — the ACTUAL per-element tile computed above,
@@ -3871,13 +4217,13 @@
     // element's own gap got stretched/shrunk to fit evenly.
     const scrollDurationMs = tile > 0 ? (tile / speed) * 1000 : 0;
     container.style.setProperty('--marquee-bulb-duration', (scrollDurationMs / 1000).toFixed(3) + 's');
-    const scrollOn = visuals.marqueeBulbScroll !== false;
-    const flickerOn = !!visuals.marqueeBulbFlicker;
+    const scrollOn = src.marqueeBulbScroll !== false;
+    const flickerOn = !!src.marqueeBulbFlicker;
     container.style.setProperty('--marquee-bulb-loop-anim-x', scrollOn ? 'marquee-bulb-loop-x' : 'none');
     container.style.setProperty('--marquee-bulb-loop-anim-y', scrollOn ? 'marquee-bulb-loop-y' : 'none');
     container.style.setProperty('--marquee-bulb-flicker-anim', flickerOn ? 'marquee-bulb-flicker' : 'none');
-    const intensity = (typeof visuals.marqueeBulbFlickerIntensity === 'number' && Number.isFinite(visuals.marqueeBulbFlickerIntensity))
-      ? visuals.marqueeBulbFlickerIntensity : 0.6;
+    const intensity = (typeof src.marqueeBulbFlickerIntensity === 'number' && Number.isFinite(src.marqueeBulbFlickerIntensity))
+      ? src.marqueeBulbFlickerIntensity : 0.6;
     container.style.setProperty('--marquee-bulb-flicker-intensity', String(intensity));
     // Sync to the shared epoch (see MARQUEE_BULB_EPOCH's own comment):
     // a negative delay equal to "how far into this cycle would we be
@@ -3898,24 +4244,27 @@
     // live layout rebuild) still computes its own fresh value here,
     // using the current elapsed time, which is what lands it in the
     // correct shared phase to begin with.
-    // // Bulb Flicker Random flips ONLY the flicker half of this to a
-    // fresh Math.random() offset instead of the epoch formula — loop
+    // // Bulb Flicker Random (src's own EFFECTIVE value — Global unless
+    // this element overrides it) flips ONLY the flicker half of this to
+    // a fresh Math.random() offset instead of the epoch formula — loop
     // motion stays epoch-synced either way, since the setting is
     // specifically about flicker timing, not bulb motion. Because this
     // whole block only ever runs once per element (the guard above),
     // "random" naturally means "freshly randomized every restart" — an
     // element that gets rebuilt often (custom text, on every layout
     // save) rerolls every time; one that never restarts keeps whatever
-    // it first rolled. Toggling Random on/off both forces every
-    // CURRENTLY-running element through this block again via
-    // resyncAllBulbDelays() (wired to the checkbox's own change
-    // listener) — otherwise the "once ever" guard would just as
+    // it first rolled. Toggling Random (global OR this element's own
+    // override) forces the affected element(s) through this block again
+    // via resyncAllBulbDelays()/resyncElementBulbDelay() (wired to the
+    // global checkbox's change listener and to setElementOverrideValue/
+    // enableElementCustomization/disableElementCustomization
+    // respectively) — otherwise the "once ever" guard would just as
     // correctly protect the new mode from ever reaching anything
     // already active.
     if (!container.style.getPropertyValue('--marquee-bulb-scroll-delay')) {
       const elapsedMs = performance.now() - MARQUEE_BULB_EPOCH;
       const scrollDelayMs = scrollDurationMs > 0 ? -(elapsedMs % scrollDurationMs) : 0;
-      const flickerDelayMs = visuals.marqueeBulbFlickerRandom
+      const flickerDelayMs = src.marqueeBulbFlickerRandom
         ? -(Math.random() * MARQUEE_BULB_FLICKER_DURATION_MS)
         : -(elapsedMs % MARQUEE_BULB_FLICKER_DURATION_MS);
       container.style.setProperty('--marquee-bulb-scroll-delay', scrollDelayMs.toFixed(1) + 'ms');
@@ -3932,8 +4281,21 @@
     document.querySelectorAll('.obj').forEach((el) => {
       el.style.removeProperty('--marquee-bulb-scroll-delay');
       el.style.removeProperty('--marquee-bulb-flicker-delay');
-      setBulbLoop(el);
+      const id = el.dataset.id;
+      setBulbLoop(el, id ? getEffectiveVisualsFor(id) : null);
     });
+  }
+  // Same idea as resyncAllBulbDelays but scoped to ONE element — used
+  // when only that element's own effective Bulb Flicker Random could
+  // have changed (its own override flipped, or customization for it was
+  // just enabled/disabled), so every OTHER already-running element's
+  // delay is left alone rather than being needlessly perturbed too.
+  function resyncElementBulbDelay(id) {
+    const el = document.getElementById('obj-' + id);
+    if (!el) return;
+    el.style.removeProperty('--marquee-bulb-scroll-delay');
+    el.style.removeProperty('--marquee-bulb-flicker-delay');
+    setBulbLoop(el, getEffectiveVisualsFor(id));
   }
   // The ring is sized against the element's CURRENT clientWidth/
   // clientHeight (see setBulbLoop), so anything that changes those —
@@ -3946,7 +4308,10 @@
   // it. Only ever (un)observed in applyBulbFrame below; observing an
   // already-observed element again is a harmless no-op per spec.
   const bulbLoopResizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) setBulbLoop(entry.target);
+    for (const entry of entries) {
+      const id = entry.target.dataset.id;
+      setBulbLoop(entry.target, id ? getEffectiveVisualsFor(id) : null);
+    }
   });
   // Marquee Bulbs: one universal shape — a single continuous ring of
   // bulbs — applied via the exact same applyBulbFrame/ensureBulbLoop/
@@ -3965,11 +4330,11 @@
   // is what keeps it from visually coinciding with an element (like
   // Album Art in the Standard preset) positioned flush against the
   // canvas edge.
-  function applyBulbFrame(el, enabled, frameInset) {
+  function applyBulbFrame(el, enabled, frameInset, eff) {
     if (enabled) {
       el.style.setProperty('--marquee-bulb-frame-inset', (frameInset || 0) + 'px');
       ensureBulbLoop(el);
-      setBulbLoop(el);
+      setBulbLoop(el, eff);
       bulbLoopResizeObserver.observe(el);
     } else {
       bulbLoopResizeObserver.unobserve(el);
@@ -3981,12 +4346,19 @@
   // 'layout' turn on only their own half, 'off' (or anything
   // unrecognized) turns both off. Elements and the layout border are
   // otherwise fully independent — each just gets its own true/false
-  // derived from the same one setting.
+  // derived from the same one setting, EXCEPT that an individual
+  // element's own Marquee Bulbs override (see getEffectiveVisualsFor's
+  // globalFallbackFor) can still force it on/off regardless of what the
+  // global mode says for Elements as a whole — the decided answer for
+  // what overriding this one setting means.
   function applyDecorativeBulbs() {
     const mode = visuals.marqueeBulbMode;
-    const elementsOn = mode === 'all' || mode === 'elements';
     const layoutOn = mode === 'all' || mode === 'layout';
-    document.querySelectorAll('.obj').forEach((el) => applyBulbFrame(el, elementsOn));
+    document.querySelectorAll('.obj').forEach((el) => {
+      const id = el.dataset.id;
+      const eff = id ? getEffectiveVisualsFor(id) : null;
+      applyBulbFrame(el, eff ? eff.marqueeBulbs : (mode === 'all' || mode === 'elements'), 0, eff);
+    });
     // The layout's own outer border gets the exact same ring, applied to
     // #stage itself — it's already position:relative/overflow:hidden,
     // the same two things every per-element container needs, so
@@ -4117,7 +4489,8 @@
   // visuals.marqueeSparkle changes (it's part of that function's own
   // rebuild signature), so toggling Stars picks the right content
   // immediately, not just a restyle of stale content.
-  function buildLinkSegmentSpan(segments) {
+  function buildLinkSegmentSpan(segments, eff) {
+    eff = eff || visuals;
     const span = document.createElement('span');
     // marquee-link-copy — lets the generic per-gap star overlay
     // (.marquee-copy::after, above) exclude this ticker: it carries a
@@ -4139,14 +4512,14 @@
       if (segments.length > 1) {
         const sep = document.createElement('span');
         sep.className = 'marquee-star-separator';
-        sep.textContent = visuals.marqueeSparkle ? MARQUEE_LINK_SEPARATOR : MARQUEE_LINK_SEPARATOR_PLAIN;
+        sep.textContent = eff.marqueeSparkle ? MARQUEE_LINK_SEPARATOR : MARQUEE_LINK_SEPARATOR_PLAIN;
         span.appendChild(sep);
       }
     });
     return span;
   }
-  function setupLinkScrollTicker(ticker, track, segments) {
-    runMarqueeScrollTicker(ticker, track, () => buildLinkSegmentSpan(segments), (referenceCopy) => {
+  function setupLinkScrollTicker(ticker, track, segments, eff) {
+    runMarqueeScrollTicker(ticker, track, () => buildLinkSegmentSpan(segments, eff), (referenceCopy) => {
       // The trailing separator (see buildLinkSegmentSpan) already sits
       // inside the copy's own measured width, providing the wrap gap's
       // entire visual spacing itself — so the flex `gap` between copies
@@ -4157,7 +4530,7 @@
       // match against.
       const hasSeparator = !!referenceCopy.querySelector('.marquee-star-separator');
       return hasSeparator ? 0 : null;
-    });
+    }, eff);
   }
   // Marquee Roll elements are real, user-positioned canvas elements
   // (added via the Add Marquee Roll button, wired exactly like custom
@@ -4212,6 +4585,11 @@
         return;
       }
       rollEl.classList.remove('obj-roll-empty');
+      // A Roll is a real element with its own id, so it can carry its own
+      // styleOverrides exactly like any other element — every setting
+      // below reads the Roll's own EFFECTIVE value, not the raw global
+      // one, so a per-Roll override actually takes effect.
+      const eff = getEffectiveVisualsFor(rollId);
       // Only meaningful for the bounce/static branch below — scroll mode
       // uses `segments` directly, via buildLinkSegmentSpan, which picks
       // its own separator content the same way (see that function's own
@@ -4220,7 +4598,7 @@
       // so using a plain spacer instead of the star separator when Stars
       // is off is the only way "off" can mean anything here, the same
       // reasoning buildLinkSegmentSpan follows for the styled path.
-      const linkSeparator = visuals.marqueeSparkle ? MARQUEE_LINK_SEPARATOR : MARQUEE_LINK_SEPARATOR_PLAIN;
+      const linkSeparator = eff.marqueeSparkle ? MARQUEE_LINK_SEPARATOR : MARQUEE_LINK_SEPARATOR_PLAIN;
       const combinedText = segments.join(linkSeparator);
       // Rebuild whenever the TEXT changes, or whenever any setting that
       // setupLinkScrollTicker/setupBounceTicker actually reads for its
@@ -4243,16 +4621,16 @@
       // those depend on covers all of it with one comparison.
       const signature = [
         combinedText,
-        visuals.marqueeScroll,
-        visuals.marqueeScrollSpeed,
-        visuals.marqueeSparkle,
-        visuals.marqueeSparkleSize,
-        visuals.marqueeEdgeFade,
+        eff.marqueeScroll,
+        eff.marqueeScrollSpeed,
+        eff.marqueeSparkle,
+        eff.marqueeSparkleSize,
+        eff.marqueeEdgeFade,
       ].join('|');
       if (track.dataset.linkSignature !== signature) {
         track.dataset.linkSignature = signature;
-        if (visuals.marqueeScroll) {
-          setupLinkScrollTicker(ticker, track, segments);
+        if (eff.marqueeScroll) {
+          setupLinkScrollTicker(ticker, track, segments, eff);
         } else {
           track.textContent = combinedText;
           setupBounceTicker(ticker, track);
@@ -4512,7 +4890,6 @@
       layout[id].y = yPct;
       el.style.left = xPct + '%';
       el.style.top = yPct + '%';
-      updateCornerRounding(id);
       renderJson();
     });
     const endDrag = (e, completed) => {
@@ -4616,7 +4993,6 @@
           // Counter-scales the marquee bulb frame — see --art-scale's
           // :root comment.
           el.style.setProperty('--art-scale', String(newScale));
-          updateCornerRounding(id);
         } else {
           // e.clientX/Y are always REAL/screen coordinates, unaffected by
           // the target's own zoom — dividing by the zoom factor converts
@@ -4665,7 +5041,6 @@
           layout[id].height = newHeight;
           el.style.width = newWidth + 'px';
           el.style.height = newHeight + 'px';
-          updateCornerRounding(id);
           if (layout[id] && layout[id].isRoll) {
             // Roll tickers are only ever built by resolveRollGroups() (see
             // its exclusion in setupAllTickers()) — it knows how to
@@ -5015,6 +5390,180 @@
         applyLayout();
       });
       row.appendChild(sw);
+      container.appendChild(row);
+    });
+    // Elements list is the canonical source of "what elements currently
+    // exist and what are they named" — the Customize tab's own dropdown
+    // just mirrors it, so it's refreshed from every place this function
+    // already runs (preset load, import, Reset, create/delete) rather
+    // than needing its own separate set of call sites.
+    refreshCustomizeElementDropdown();
+  }
+  // ============================================================
+  // Per-element Visual Settings — the Customize tab. Builds/rebuilds off
+  // OVERRIDABLE_SETTINGS (see its own comment, near layout/elementOrder)
+  // plus whichever element is currently picked in
+  // #customizeElementSelect. Every row's control reads/writes through
+  // setElementOverrideValue, never the DOM directly, so this stays in
+  // sync with layout[id].styleOverrides no matter what else changes it
+  // (import, preset switch, ...); whether those values are actually
+  // LIVE is gated once, by #customizeEnableToggle mirroring this
+  // element's own layout[id].useCustomStyles — not per row (an earlier
+  // version had a toggle on every individual row; reported live as
+  // unwanted).
+  // ============================================================
+  function customizeElementLabel(id) {
+    if (layout[id] && layout[id].name) return layout[id].name;
+    const el = document.getElementById('obj-' + id);
+    return (el && el.dataset.label) || id;
+  }
+  function refreshCustomizeElementDropdown() {
+    const select = document.getElementById('customizeElementSelect');
+    if (!select) return;
+    const prev = select.value;
+    select.innerHTML = '';
+    elementOrder.forEach((id) => {
+      if (!layout[id]) return;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = customizeElementLabel(id);
+      select.appendChild(opt);
+    });
+    select.value = elementOrder.includes(prev) ? prev : (elementOrder[0] || '');
+    syncCustomizeEnableToggle();
+    renderCustomizeSettingRows();
+  }
+  // Mirrors the CURRENTLY SELECTED element's own useCustomStyles flag
+  // onto the one shared toggle — called whenever the selected element
+  // changes, so the toggle always describes THIS element, not whichever
+  // one was selected before.
+  function syncCustomizeEnableToggle() {
+    const select = document.getElementById('customizeElementSelect');
+    const toggle = document.getElementById('customizeEnableToggle');
+    if (!select || !toggle) return;
+    const id = select.value;
+    toggle.checked = !!(layout[id] && layout[id].useCustomStyles);
+  }
+  // Builds just the CONTROL half of one row (not its label) — the
+  // control always shows the element's current EFFECTIVE value (its own
+  // override if customization is on, else Global's live value), and is
+  // only enabled for editing while customization is on for this element
+  // (see useCustom, read once by the caller and passed down here rather
+  // than re-read per row).
+  function buildCustomizeControl(id, setting, useCustom) {
+    const key = setting.key;
+    const eff = getEffectiveVisualsFor(id);
+    if (setting.type === 'coloralpha') {
+      const wrap = document.createElement('span');
+      wrap.className = 'font-picker-row';
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      colorInput.className = 'color-input';
+      colorInput.value = eff[key];
+      colorInput.disabled = !useCustom;
+      const alphaKey = setting.alphaKey;
+      const alphaInput = document.createElement('input');
+      alphaInput.type = 'range';
+      alphaInput.min = '0';
+      alphaInput.max = '1';
+      alphaInput.step = '0.02';
+      alphaInput.value = String(eff[alphaKey]);
+      alphaInput.disabled = !useCustom;
+      colorInput.addEventListener('input', () => {
+        if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, colorInput.value);
+      });
+      alphaInput.addEventListener('input', () => {
+        if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, alphaKey, parseFloat(alphaInput.value));
+      });
+      wrap.append(colorInput, alphaInput);
+      return wrap;
+    }
+    if (setting.type === 'color') {
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.className = 'color-input';
+      input.value = eff[key];
+      input.disabled = !useCustom;
+      input.addEventListener('input', () => {
+        if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, input.value);
+      });
+      return input;
+    }
+    if (setting.type === 'checkbox') {
+      const wrap = document.createElement('span');
+      wrap.className = 'switch' + (useCustom ? '' : ' is-disabled');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = !!eff[key];
+      input.disabled = !useCustom;
+      const track = document.createElement('span');
+      track.className = 'track';
+      const thumb = document.createElement('span');
+      thumb.className = 'thumb';
+      wrap.append(input, track, thumb);
+      input.addEventListener('change', () => {
+        if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, input.checked);
+      });
+      return wrap;
+    }
+    if (setting.type === 'font') {
+      const select = document.createElement('select');
+      // Mirrors whatever the global font picker currently offers
+      // (fallback list, or the real system list once Load System Fonts
+      // has been used) — same source, not a second independent list.
+      Array.from(fontPicker.options).forEach((o) => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.textContent;
+        select.appendChild(opt);
+      });
+      if (![...select.options].some((o) => o.value === eff[key])) {
+        const opt = document.createElement('option');
+        opt.value = eff[key];
+        opt.textContent = eff[key];
+        select.appendChild(opt);
+      }
+      select.value = eff[key];
+      select.disabled = !useCustom;
+      select.addEventListener('change', () => {
+        if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, select.value);
+      });
+      return select;
+    }
+    // range
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(setting.min);
+    input.max = String(setting.max);
+    input.step = String(setting.step);
+    input.value = String(eff[key]);
+    input.disabled = !useCustom;
+    input.addEventListener('input', () => {
+      if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, parseFloat(input.value));
+    });
+    return input;
+  }
+  // Full rebuild of every row, not incremental patching — under 20 rows
+  // is cheap enough that a fresh build on every selection/value change
+  // is simpler and less error-prone than tracking which single row
+  // needs updating.
+  function renderCustomizeSettingRows() {
+    const select = document.getElementById('customizeElementSelect');
+    const container = document.getElementById('customizeSettingsRows');
+    if (!select || !container) return;
+    const id = select.value;
+    container.innerHTML = '';
+    if (!id || !layout[id]) return;
+    const useCustom = !!layout[id].useCustomStyles;
+    OVERRIDABLE_SETTINGS.forEach((setting) => {
+      const row = document.createElement('div');
+      row.className = 'control-row customize-setting-row';
+      const label = document.createElement('label');
+      label.textContent = setting.label + ':';
+      const controlCell = document.createElement('span');
+      controlCell.className = 'control-cell';
+      controlCell.appendChild(buildCustomizeControl(id, setting, useCustom));
+      row.append(label, controlCell);
       container.appendChild(row);
     });
   }
@@ -5726,6 +6275,56 @@
     if (e.key === 'Enter') addCustomTextFromInput();
   });
   document.getElementById('addRoll').addEventListener('click', createRollElement);
+  // Global/Customize tab switching — plain show/hide, see the HTML
+  // comment above .settings-tabs. Switching TO Customize re-renders its
+  // rows so any setting NOT overridden for the selected element picks up
+  // whatever Global changed to while this tab wasn't visible, instead of
+  // showing a stale value from the last time it was open.
+  const settingsTabGlobalBtn = document.getElementById('settingsTabGlobalBtn');
+  const settingsTabCustomizeBtn = document.getElementById('settingsTabCustomizeBtn');
+  const globalSettingsTabEl = document.getElementById('globalSettingsTab');
+  const customizeSettingsTabEl = document.getElementById('customizeSettingsTab');
+  settingsTabGlobalBtn.addEventListener('click', () => {
+    settingsTabGlobalBtn.classList.add('active');
+    settingsTabGlobalBtn.setAttribute('aria-selected', 'true');
+    settingsTabCustomizeBtn.classList.remove('active');
+    settingsTabCustomizeBtn.setAttribute('aria-selected', 'false');
+    globalSettingsTabEl.style.display = '';
+    customizeSettingsTabEl.style.display = 'none';
+  });
+  settingsTabCustomizeBtn.addEventListener('click', () => {
+    settingsTabCustomizeBtn.classList.add('active');
+    settingsTabCustomizeBtn.setAttribute('aria-selected', 'true');
+    settingsTabGlobalBtn.classList.remove('active');
+    settingsTabGlobalBtn.setAttribute('aria-selected', 'false');
+    customizeSettingsTabEl.style.display = '';
+    globalSettingsTabEl.style.display = 'none';
+    syncCustomizeEnableToggle();
+    renderCustomizeSettingRows();
+  });
+  document.getElementById('customizeElementSelect').addEventListener('change', () => {
+    syncCustomizeEnableToggle();
+    renderCustomizeSettingRows();
+  });
+  // The ONE flag for whichever element is currently selected — see
+  // OVERRIDABLE_SETTINGS' own comment for why this replaced a per-row
+  // toggle.
+  document.getElementById('customizeEnableToggle').addEventListener('change', (e) => {
+    const id = document.getElementById('customizeElementSelect').value;
+    if (!id) return;
+    if (e.target.checked) {
+      enableElementCustomization(id);
+    } else {
+      disableElementCustomization(id);
+    }
+    renderCustomizeSettingRows();
+  });
+  document.getElementById('customizeResetBtn').addEventListener('click', () => {
+    const id = document.getElementById('customizeElementSelect').value;
+    if (id) resetElementToGlobal(id);
+    syncCustomizeEnableToggle();
+    renderCustomizeSettingRows();
+  });
   document.getElementById('downloadBtn').addEventListener('click', () => {
     const json = exportState();
     const blob = new Blob([json], { type: 'application/json' });
