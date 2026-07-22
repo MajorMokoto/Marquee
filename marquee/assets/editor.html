@@ -102,6 +102,21 @@
     --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Consolas', 'SFMono-Regular', Menlo, monospace;
   }
+  /* Visual Settings panel restyle — a deliberately separate palette from
+     the rest of the editor's warm/theatrical chrome (--void/--gold/etc
+     above), scoped entirely to #visualSettingsPanel so it never leaks
+     into the Elements/Import-Export panels that share .panel/.control-row/
+     .switch with it. --vs-accent is its OWN chrome accent — never rename
+     this to --accent or point it at that var; --accent is the overlay's
+     own user-configurable theme color (the Accent Color row below drives
+     it) and must stay decoupled from this panel's UI chrome. */
+  :root {
+    --vs-page-bg: #0d0d0d;
+    --vs-card-bg: #1a1a1a;
+    --vs-accent: #ef4444;
+    --vs-border: rgba(255, 255, 255, 0.1);
+    --vs-text-dim: #9a9a9a;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -1188,7 +1203,7 @@
     cursor: pointer;
   }
   .settings-tab:hover { color: var(--paper); }
-  .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .settings-tab.active { color: var(--vs-accent); border-bottom-color: var(--vs-accent); }
   /* One row per OVERRIDABLE_SETTINGS entry, built in
      renderCustomizeSettingRows() — label, then the control itself.
      Whether the control is live or just mirroring Global (disabled) is
@@ -1212,6 +1227,163 @@
   .customize-setting-row .control-cell select:disabled { opacity: 0.45; }
   .customize-setting-row .control-cell .switch { transition: opacity .15s; }
   .customize-setting-row .control-cell .switch.is-disabled { opacity: 0.45; }
+  /* ---- Visual Settings panel restyle (FeedBack host-app style) ----
+     Everything below is scoped under #visualSettingsPanel so it can't
+     leak into the Elements List / Import-Export panels, which reuse
+     .panel/.control-row/.switch/.font-picker-row too — see the --vs-*
+     token comment near the top of this block for why a whole separate
+     palette exists here instead of reusing --void/--gold/--paper. */
+  #visualSettingsPanel {
+    background: var(--vs-page-bg);
+    border-color: var(--vs-border);
+  }
+  #visualSettingsPanel .panel-title { color: #f2f2f2; }
+  /* Denser than the shared .control-row default below — this panel has
+     ~28 settings where every other panel only ever shows a handful, so
+     the generous default spacing reads as wasted space here specifically. */
+  #visualSettingsPanel .control-row {
+    padding: 5px 6px;
+    border-bottom-color: var(--vs-border);
+  }
+  /* Overrides the shared rule's hardcoded orange (line ~1258) — that
+     rule stays untouched for other panels; this one only fires inside
+     #visualSettingsPanel, at higher specificity. */
+  #visualSettingsPanel .control-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--vs-accent);
+  }
+  /* Section grouping for the Global tab reorg. .settings-section-rows is
+     a direct-children-only wrapper (holds just that section's own rows/
+     pairs, not its title) so :last-child below resolves per-section
+     instead of across the whole flat tab like the old .control-row:last-
+     child (line ~1252) did. */
+  #visualSettingsPanel .settings-section {
+    background: var(--vs-card-bg);
+    border-radius: 8px;
+    padding: 6px 12px;
+  }
+  #visualSettingsPanel .settings-section + .settings-section { margin-top: 10px; }
+  #visualSettingsPanel .settings-section-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #f2f2f2;
+    margin: 4px 0 2px;
+  }
+  #visualSettingsPanel .settings-section-rows { display: flex; flex-direction: column; }
+  #visualSettingsPanel .settings-section-rows > .control-row:last-child,
+  #visualSettingsPanel .settings-section-rows > .settings-row-pair:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  /* Two short rows packed side by side instead of each taking the full
+     panel width — the pair as a whole carries the row divider; its two
+     cells don't (see the next rule) since a pair should read as one
+     dense row, not two. */
+  #visualSettingsPanel .settings-row-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 20px;
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--vs-border);
+  }
+  #visualSettingsPanel .settings-row-pair > .control-row {
+    padding: 0;
+    border-bottom: none;
+  }
+  /* A slider row's label+value sit on one line; the slider itself
+     (wrapped in .vs-slider-row, see enhanceSlider() in the script) is
+     forced onto its own full-width line below via flex-basis:100% — the
+     standard flexbox "solo item can't fit remaining space, so it and
+     everything after it wrap" trick. Only applied where a row's whole
+     job is one slider; the two color+slider combo rows (Element/
+     Background Color-Transparency) stay single-line, they're already
+     full width with room to spare. */
+  #visualSettingsPanel .control-row--slider .vs-slider-row { flex-basis: 100%; }
+  /* New square checkbox, replacing the pill .switch used elsewhere in the
+     editor (toolbar, Elements list) — matches the FeedBack host-app
+     screenshots' plain outline-square convention (marquee/design/
+     reference.md, Layout patterns). Native input styled directly via
+     appearance:none rather than the .switch's track+thumb span trio, so
+     there's no wrapper markup to keep in sync. */
+  #visualSettingsPanel .vs-checkbox {
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    flex: none;
+    margin: 0;
+    border-radius: 3px;
+    border: 1px solid var(--vs-text-dim);
+    background: var(--vs-page-bg);
+    cursor: pointer;
+    position: relative;
+  }
+  #visualSettingsPanel .vs-checkbox:checked {
+    border-color: var(--vs-accent);
+    background: var(--vs-accent);
+  }
+  #visualSettingsPanel .vs-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px; top: 1px;
+    width: 4px; height: 8px;
+    border: solid #0d0d0d;
+    border-width: 0 2px 2px 0;
+    transform: rotate(40deg);
+  }
+  #visualSettingsPanel .vs-checkbox:disabled { opacity: 0.45; cursor: default; }
+  /* Slider fill + min/max/value labels — the file has no prior art for
+     either (see the plain accent-color-tinted native rule this overrides
+     below); --fill is written per-input by syncSliderFill() in the
+     script, inline, on every 'input' event. */
+  #visualSettingsPanel input[type="range"] {
+    appearance: none;
+    width: 100%;
+    min-width: 50px;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right,
+      var(--vs-accent) 0%, var(--vs-accent) var(--fill, 0%),
+      rgba(255, 255, 255, 0.15) var(--fill, 0%), rgba(255, 255, 255, 0.15) 100%);
+    cursor: pointer;
+  }
+  #visualSettingsPanel input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--vs-card-bg);
+    cursor: grab;
+  }
+  #visualSettingsPanel input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--vs-card-bg);
+    cursor: grab;
+  }
+  #visualSettingsPanel input[type="range"]:disabled { opacity: 0.45; cursor: default; }
+  #visualSettingsPanel .vs-slider-row { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  #visualSettingsPanel .vs-slider-min,
+  #visualSettingsPanel .vs-slider-max {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    color: var(--vs-text-dim);
+    flex: none;
+  }
+  /* Bold + bright + extra margin so this doesn't visually run together
+     with .vs-slider-max right before it — both are small mono numbers,
+     but this one is the live value, not a static bound, and needs to
+     read as clearly different at a glance. */
+  #visualSettingsPanel .vs-slider-value {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #fff;
+    flex: none;
+    margin-left: 8px;
+  }
+  #visualSettingsPanel .vs-slider-value::before { content: '= '; color: var(--vs-text-dim); font-weight: 400; }
   /* Reported live: with justify-content:space-between spreading a short
      label all the way from a short control across the panel's full
      width, it was hard to tell at a glance which control belonged to
@@ -1759,7 +1931,7 @@
   <!-- Confetti burst, drawn on top of every element regardless of stacking
        order (see .confetti-canvas's z-index). Never intercepts drag/resize
        — pointer-events:none. -->
-  <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas></div><div class="panel">
+  <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas></div><div class="panel" id="visualSettingsPanel">
   <p class="panel-title">VISUAL SETTINGS:</p>
   <!-- Global applies to every element identically, exactly like this
        whole panel always has. Customize is per-element: pick one element
@@ -1772,220 +1944,248 @@
     <button type="button" class="settings-tab" id="settingsTabCustomizeBtn" role="tab" aria-selected="false" aria-controls="customizeSettingsTab">Customize</button>
   </div>
   <div id="globalSettingsTab" role="tabpanel">
-  <div class="control-row">
-    <label for="stageWidth">Layout Size:</label>
-    <div class="font-picker-row">
-      <span class="fontsize-field stage-size-field">
-        <button type="button" class="step-btn" id="stageWidthMinus" aria-label="Decrease layout width">−</button>
-        <input type="number" id="stageWidth" min="120" max="3840" step="10" value="520" aria-label="Layout width in pixels" />
-        <button type="button" class="step-btn" id="stageWidthPlus" aria-label="Increase layout width">+</button>
-      </span>
-      <span class="stage-size-x">×</span>
-      <span class="fontsize-field stage-size-field">
-        <button type="button" class="step-btn" id="stageHeightMinus" aria-label="Decrease layout height">−</button>
-        <input type="number" id="stageHeight" min="80" max="2160" step="10" value="200" aria-label="Layout height in pixels" />
-        <button type="button" class="step-btn" id="stageHeightPlus" aria-label="Increase layout height">+</button>
-      </span>
-      <span class="unit">px</span>
+  <div class="settings-section">
+    <p class="settings-section-title">Layout &amp; Canvas:</p>
+    <div class="settings-section-rows">
+      <div class="control-row">
+        <label for="stageWidth">Layout Size:</label>
+        <div class="font-picker-row">
+          <span class="fontsize-field stage-size-field">
+            <button type="button" class="step-btn" id="stageWidthMinus" aria-label="Decrease layout width">−</button>
+            <input type="number" id="stageWidth" min="120" max="3840" step="10" value="520" aria-label="Layout width in pixels" />
+            <button type="button" class="step-btn" id="stageWidthPlus" aria-label="Increase layout width">+</button>
+          </span>
+          <span class="stage-size-x">×</span>
+          <span class="fontsize-field stage-size-field">
+            <button type="button" class="step-btn" id="stageHeightMinus" aria-label="Decrease layout height">−</button>
+            <input type="number" id="stageHeight" min="80" max="2160" step="10" value="200" aria-label="Layout height in pixels" />
+            <button type="button" class="step-btn" id="stageHeightPlus" aria-label="Increase layout height">+</button>
+          </span>
+          <span class="unit">px</span>
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row control-row--slider">
+          <label for="borderWidth">Border Thickness:</label>
+          <div class="vs-slider-row">
+            <input type="range" id="borderWidth" min="0" max="6" step="1" value="1" />
+          </div>
+        </div>
+        <div class="control-row control-row--slider">
+          <label for="edgeRounding">Edge Rounding:</label>
+          <div class="vs-slider-row">
+            <input type="range" id="edgeRounding" min="0" max="20" step="1" value="0" aria-label="Corner rounding, in pixels, for the canvas and every element" />
+          </div>
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row">
+          <label for="elementHeadSize">Element Header Text Size:</label>
+          <span class="fontsize-field">
+            <button type="button" class="step-btn" id="elementHeadSizeMinus" aria-label="Decrease Element Header Text Size">−</button>
+            <input type="number" id="elementHeadSize" min="6" max="160" step="1" value="10" aria-label="Element header text size in pixels" />
+            <button type="button" class="step-btn" id="elementHeadSizePlus" aria-label="Increase Element Header Text Size">+</button>
+            <span class="unit">px</span>
+          </span>
+        </div>
+        <div class="control-row">
+          <label for="fadeSeconds">Fade Out Time:</label>
+          <span class="fontsize-field">
+            <button type="button" class="step-btn" id="fadeSecondsMinus" aria-label="Decrease Fade Out Time">−</button>
+            <input type="number" id="fadeSeconds" min="0" max="30" step="0.5" value="10" aria-label="Seconds the overlay takes to fade in/out when a song starts or stops" />
+            <button type="button" class="step-btn" id="fadeSecondsPlus" aria-label="Increase Fade Out Time">+</button>
+            <span class="unit">s</span>
+          </span>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="control-row">
-    <label for="opacity">Element Color/Transparency:</label>
-    <div class="font-picker-row">
-      <input type="color" class="color-input" id="chipColor" value="#000000" aria-label="Element background color" />
-      <input type="range" id="opacity" min="0" max="1" step="0.02" value="0" />
+  <div class="settings-section">
+    <p class="settings-section-title">Color &amp; Type:</p>
+    <div class="settings-section-rows">
+      <div class="control-row">
+        <label for="opacity">Element Color/Transparency:</label>
+        <div class="font-picker-row">
+          <input type="color" class="color-input" id="chipColor" value="#000000" aria-label="Element background color" />
+          <input type="range" id="opacity" min="0" max="1" step="0.02" value="0" />
+        </div>
+      </div>
+      <div class="control-row">
+        <label for="canvasBgOpacity">Background Color/Transparency:</label>
+        <div class="font-picker-row">
+          <input type="color" class="color-input" id="canvasBgColor" value="#000000" aria-label="Background color" />
+          <input type="range" id="canvasBgOpacity" min="0" max="1" step="0.02" value="0" />
+        </div>
+      </div>
+      <div class="control-row">
+        <label>Accent Color:</label>
+        <div class="swatches" id="swatches">
+          <input type="color" class="color-input" id="accentColorPicker" value="#ff8200" aria-label="Custom accent color" />
+          <button class="swatch" style="background:#a8a8a8" data-accent="#a8a8a8" data-accent-rgb="168 168 168" aria-pressed="false" aria-label="Silver"></button>
+          <button class="swatch" style="background:#5fbf8a" data-accent="#5fbf8a" data-accent-rgb="95 191 138" aria-pressed="false" aria-label="Emerald"></button>
+          <button class="swatch" style="background:#4fa7e0" data-accent="#4fa7e0" data-accent-rgb="79 167 224" aria-pressed="false" aria-label="Electric blue"></button>
+          <button class="swatch" style="background:#ff8200" data-accent="#ff8200" data-accent-rgb="255 130 0" aria-pressed="true" aria-label="Tangerine"></button>
+          <button class="swatch" style="background:#e0568c" data-accent="#e0568c" data-accent-rgb="224 86 140" aria-pressed="false" aria-label="Hot magenta"></button>
+          <button class="swatch" style="background:#9c3a4a" data-accent="#9c3a4a" data-accent-rgb="156 58 74" aria-pressed="false" aria-label="Garnet"></button>
+          <button class="swatch" style="background:#804200" data-accent="#804200" data-accent-rgb="128 66 0" aria-pressed="false" aria-label="Burnt Orange"></button>
+        </div>
+      </div>
+      <div class="control-row">
+        <label for="fontPicker">Element Font:</label>
+        <div class="font-picker-row">
+          <button class="load-fonts-btn" id="loadSystemFonts" type="button">Load System Fonts</button>
+          <select id="fontPicker"></select>
+        </div>
+      </div>
+      <p class="font-picker-note" id="fontPickerNote"></p>
+      <div class="control-row">
+        <label for="boldText">Bold Text:</label>
+        <input type="checkbox" id="boldText" class="vs-checkbox" />
+      </div>
     </div>
   </div>
-  <div class="control-row">
-    <label for="canvasBgOpacity">Background Color/Transparency:</label>
-    <div class="font-picker-row">
-      <input type="color" class="color-input" id="canvasBgColor" value="#000000" aria-label="Background color" />
-      <input type="range" id="canvasBgOpacity" min="0" max="1" step="0.02" value="0" />
+  <div class="settings-section">
+    <p class="settings-section-title">Marquee Scroll:</p>
+    <div class="settings-section-rows">
+      <!-- The rest of this section only does anything while Marquee
+           Scroll itself is on — flair for that effect, not independent
+           settings. -->
+      <div class="settings-row-pair">
+        <div class="control-row">
+          <label for="marqueeScroll">Marquee Scroll:</label>
+          <input type="checkbox" id="marqueeScroll" class="vs-checkbox" aria-label="Continuously scroll Song Title/Artist, Tuning, Path, and Year like a marquee sign" />
+        </div>
+        <div class="control-row control-row--slider">
+          <label for="marqueeScrollSpeed">Marquee Scroll Speed:</label>
+          <div class="vs-slider-row">
+            <input type="range" id="marqueeScrollSpeed" min="10" max="300" step="10" value="80" aria-label="Marquee scroll speed for Song Title/Artist, Tuning, Path, and Year, in pixels per second" />
+          </div>
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row">
+          <label for="marqueeEdgeFade">Marquee Edge Fade:</label>
+          <input type="checkbox" id="marqueeEdgeFade" class="vs-checkbox" aria-label="Fade scrolling text at the left/right edges instead of a hard clip" />
+        </div>
+        <div class="control-row">
+          <label for="marqueeSparkle">Marquee Stars:</label>
+          <input type="checkbox" id="marqueeSparkle" class="vs-checkbox" aria-label="Show a small twinkling cluster of stars in the gap between repeated scrolling text" />
+        </div>
+      </div>
+      <div class="control-row control-row--slider">
+        <label for="marqueeSparkleSize">Marquee Star Size:</label>
+        <div class="vs-slider-row">
+          <input type="range" id="marqueeSparkleSize" min="4" max="64" step="1" value="10" aria-label="Size of the twinkling stars, in pixels — the same size on every element regardless of its own font size" />
+        </div>
+      </div>
     </div>
   </div>
-  <div class="control-row">
-    <label for="borderWidth">Border Thickness:</label>
-    <input type="range" id="borderWidth" min="0" max="6" step="1" value="1" />
-  </div>
-  <div class="control-row">
-    <label for="edgeRounding">Edge Rounding:</label>
-    <input type="range" id="edgeRounding" min="0" max="20" step="1" value="0" aria-label="Corner rounding, in pixels, for the canvas and every element" />
-  </div>
-  <div class="control-row">
-    <label for="elementHeadSize">Element Header Text Size:</label>
-    <span class="fontsize-field">
-      <button type="button" class="step-btn" id="elementHeadSizeMinus" aria-label="Decrease Element Header Text Size">−</button>
-      <input type="number" id="elementHeadSize" min="6" max="160" step="1" value="10" aria-label="Element header text size in pixels" />
-      <button type="button" class="step-btn" id="elementHeadSizePlus" aria-label="Increase Element Header Text Size">+</button>
-      <span class="unit">px</span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="fadeSeconds">Fade Out Time:</label>
-    <span class="fontsize-field">
-      <button type="button" class="step-btn" id="fadeSecondsMinus" aria-label="Decrease Fade Out Time">−</button>
-      <input type="number" id="fadeSeconds" min="0" max="30" step="0.5" value="10" aria-label="Seconds the overlay takes to fade in/out when a song starts or stops" />
-      <button type="button" class="step-btn" id="fadeSecondsPlus" aria-label="Increase Fade Out Time">+</button>
-      <span class="unit">s</span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label>Accent Color:</label>
-    <div class="swatches" id="swatches">
-      <input type="color" class="color-input" id="accentColorPicker" value="#ff8200" aria-label="Custom accent color" />
-      <button class="swatch" style="background:#a8a8a8" data-accent="#a8a8a8" data-accent-rgb="168 168 168" aria-pressed="false" aria-label="Silver"></button>
-      <button class="swatch" style="background:#5fbf8a" data-accent="#5fbf8a" data-accent-rgb="95 191 138" aria-pressed="false" aria-label="Emerald"></button>
-      <button class="swatch" style="background:#4fa7e0" data-accent="#4fa7e0" data-accent-rgb="79 167 224" aria-pressed="false" aria-label="Electric blue"></button>
-      <button class="swatch" style="background:#ff8200" data-accent="#ff8200" data-accent-rgb="255 130 0" aria-pressed="true" aria-label="Tangerine"></button>
-      <button class="swatch" style="background:#e0568c" data-accent="#e0568c" data-accent-rgb="224 86 140" aria-pressed="false" aria-label="Hot magenta"></button>
-      <button class="swatch" style="background:#9c3a4a" data-accent="#9c3a4a" data-accent-rgb="156 58 74" aria-pressed="false" aria-label="Garnet"></button>
-      <button class="swatch" style="background:#804200" data-accent="#804200" data-accent-rgb="128 66 0" aria-pressed="false" aria-label="Burnt Orange"></button>
+  <div class="settings-section">
+    <p class="settings-section-title">Marquee Bulbs:</p>
+    <div class="settings-section-rows">
+      <div class="control-row">
+        <label for="marqueeBulbMode">Marquee Bulbs:</label>
+        <select id="marqueeBulbMode" class="marquee-bulb-mode-select" aria-label="Which areas show the scrolling marquee light bulb ring">
+          <option value="off">Off</option>
+          <option value="all">All (Elements + Layout)</option>
+          <option value="elements">Elements Only</option>
+          <option value="layout">Layout Only</option>
+        </select>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row control-row--slider">
+          <label for="marqueeBulbSize">Marquee Bulb Size:</label>
+          <div class="vs-slider-row">
+            <input type="range" id="marqueeBulbSize" min="1.5" max="55" step="0.5" value="2.8" aria-label="Diameter of the scrolling marquee light bulbs" />
+          </div>
+        </div>
+        <div class="control-row control-row--slider">
+          <label for="marqueeBulbGap">Marquee Bulb Gap:</label>
+          <div class="vs-slider-row">
+            <input type="range" id="marqueeBulbGap" min="5" max="60" step="1" value="11" aria-label="Gap between one bulb and the next, in pixels, independent of Bulb Size" />
+          </div>
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row control-row--slider">
+          <label for="marqueeBulbSpeedElements">Marquee Bulb Speed (Elements):</label>
+          <div class="vs-slider-row">
+            <input type="range" id="marqueeBulbSpeedElements" min="10" max="300" step="10" value="80" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" />
+          </div>
+        </div>
+        <div class="control-row control-row--slider">
+          <label for="marqueeBulbSpeedLayout">Marquee Bulb Speed (Layout):</label>
+          <div class="vs-slider-row">
+            <input type="range" id="marqueeBulbSpeedLayout" min="10" max="300" step="10" value="80" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" />
+          </div>
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row">
+          <label for="marqueeBulbScroll">Marquee Bulb Scroll:</label>
+          <input type="checkbox" id="marqueeBulbScroll" class="vs-checkbox" checked aria-label="Scroll the marquee light bulbs; turn off to leave them static in place" />
+        </div>
+        <div class="control-row">
+          <label for="marqueeBulbFlicker">Marquee Bulb Flicker:</label>
+          <input type="checkbox" id="marqueeBulbFlicker" class="vs-checkbox" aria-label="Flicker the marquee light bulbs like an old theater sign" />
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row control-row--slider">
+          <label for="marqueeBulbFlickerIntensity">Marquee Bulb Flicker Intensity:</label>
+          <div class="vs-slider-row">
+            <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0.6" aria-label="How deep the marquee bulb flicker dips" />
+          </div>
+        </div>
+        <div class="control-row">
+          <label for="marqueeBulbFlickerRandom">Marquee Bulb Flicker Random:</label>
+          <input type="checkbox" id="marqueeBulbFlickerRandom" class="vs-checkbox" aria-label="Flicker every element's bulbs on its own random timing instead of all in sync; turning this off resyncs everyone to the same shared timing" />
+        </div>
+      </div>
     </div>
   </div>
-  <div class="control-row">
-    <label for="fontPicker">Element Font:</label>
-    <div class="font-picker-row">
-      <button class="load-fonts-btn" id="loadSystemFonts" type="button">Load System Fonts</button>
-      <select id="fontPicker"></select>
-    </div>
-  </div>
-  <p class="font-picker-note" id="fontPickerNote"></p>
-  <div class="control-row">
-    <label for="boldText">Bold Text:</label>
-    <span class="switch">
-      <input type="checkbox" id="boldText" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="marqueeScroll">Marquee Scroll:</label>
-    <span class="switch">
-      <input type="checkbox" id="marqueeScroll" aria-label="Continuously scroll Song Title/Artist, Tuning, Path, and Year like a marquee sign" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <!-- All four only do anything while Marquee Scroll itself is on —
-       flair for that effect, not independent settings. -->
-  <div class="control-row">
-    <label for="marqueeScrollSpeed">Marquee Scroll Speed:</label>
-    <input type="range" id="marqueeScrollSpeed" min="10" max="300" step="10" value="80" aria-label="Marquee scroll speed for Song Title/Artist, Tuning, Path, and Year, in pixels per second" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeEdgeFade">Marquee Edge Fade:</label>
-    <span class="switch">
-      <input type="checkbox" id="marqueeEdgeFade" aria-label="Fade scrolling text at the left/right edges instead of a hard clip" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="marqueeSparkle">Marquee Stars:</label>
-    <span class="switch">
-      <input type="checkbox" id="marqueeSparkle" aria-label="Show a small twinkling cluster of stars in the gap between repeated scrolling text" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="marqueeSparkleSize">Marquee Star Size:</label>
-    <input type="range" id="marqueeSparkleSize" min="4" max="64" step="1" value="10" aria-label="Size of the twinkling stars, in pixels — the same size on every element regardless of its own font size" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbMode">Marquee Bulbs:</label>
-    <select id="marqueeBulbMode" class="marquee-bulb-mode-select" aria-label="Which areas show the scrolling marquee light bulb ring">
-      <option value="off">Off</option>
-      <option value="all">All (Elements + Layout)</option>
-      <option value="elements">Elements Only</option>
-      <option value="layout">Layout Only</option>
-    </select>
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbSize">Marquee Bulb Size:</label>
-    <input type="range" id="marqueeBulbSize" min="1.5" max="55" step="0.5" value="2.8" aria-label="Diameter of the scrolling marquee light bulbs" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbGap">Marquee Bulb Gap:</label>
-    <input type="range" id="marqueeBulbGap" min="5" max="60" step="1" value="11" aria-label="Gap between one bulb and the next, in pixels, independent of Bulb Size" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbSpeedElements">Marquee Bulb Speed (Elements):</label>
-    <input type="range" id="marqueeBulbSpeedElements" min="10" max="300" step="10" value="80" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbSpeedLayout">Marquee Bulb Speed (Layout):</label>
-    <input type="range" id="marqueeBulbSpeedLayout" min="10" max="300" step="10" value="80" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbScroll">Marquee Bulb Scroll:</label>
-    <span class="switch">
-      <input type="checkbox" id="marqueeBulbScroll" checked aria-label="Scroll the marquee light bulbs; turn off to leave them static in place" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbFlicker">Marquee Bulb Flicker:</label>
-    <span class="switch">
-      <input type="checkbox" id="marqueeBulbFlicker" aria-label="Flicker the marquee light bulbs like an old theater sign" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbFlickerIntensity">Marquee Bulb Flicker Intensity:</label>
-    <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0.6" aria-label="How deep the marquee bulb flicker dips" />
-  </div>
-  <div class="control-row">
-    <label for="marqueeBulbFlickerRandom">Marquee Bulb Flicker Random:</label>
-    <span class="switch">
-      <input type="checkbox" id="marqueeBulbFlickerRandom" aria-label="Flicker every element's bulbs on its own random timing instead of all in sync; turning this off resyncs everyone to the same shared timing" />
-      <span class="track"></span>
-      <span class="thumb"></span>
-    </span>
-  </div>
-  <div class="control-row">
-    <label for="confettiEnabled">Confetti:</label>
-    <div class="font-picker-row">
-      <!-- Fires the local canvas preview AND pushes a real one-shot
-           song-ended event to the backend (see the click handler below),
-           so a connected render.html/OBS Browser Source shows it too —
-           with a guaranteed-perfect score so it always fires regardless
-           of the configured Trigger At, matching "test" intent (a real
-           song run is what actually exercises the real threshold). -->
-      <button class="load-fonts-btn" id="testConfettiBtn" type="button">Test Confetti</button>
-      <span class="switch">
-        <input type="checkbox" id="confettiEnabled" checked />
-        <span class="track"></span>
-        <span class="thumb"></span>
-      </span>
-    </div>
-  </div>
-  <div class="control-row">
-    <label for="confettiDuration">Confetti Duration:</label>
-    <div class="font-picker-row">
-      <span class="fontsize-field">
-        <button type="button" class="step-btn" id="confettiDurationMinus" aria-label="Decrease confetti duration">−</button>
-        <input type="number" id="confettiDuration" min="1" max="20" step="0.5" value="7" aria-label="Confetti duration in seconds" />
-        <button type="button" class="step-btn" id="confettiDurationPlus" aria-label="Increase confetti duration">+</button>
-      </span>
-      <span class="unit">s</span>
-    </div>
-  </div>
-  <div class="control-row">
-    <label for="confettiVolume">Confetti Amount:</label>
-    <input type="range" id="confettiVolume" min="0" max="1" step="0.05" value="0.1" aria-label="Confetti amount, light to screen-filling" />
-  </div>
-  <div class="control-row">
-    <label for="confettiTriggerAt">Confetti Trigger At:</label>
-    <div class="font-picker-row">
-      <span class="fontsize-field">
-        <button type="button" class="step-btn" id="confettiTriggerAtMinus" aria-label="Decrease confetti trigger percentage">−</button>
-        <input type="number" id="confettiTriggerAt" min="0.1" max="100" step="0.1" value="100" aria-label="Score percentage that triggers confetti" />
-        <button type="button" class="step-btn" id="confettiTriggerAtPlus" aria-label="Increase confetti trigger percentage">+</button>
-      </span>
-      <span class="unit">%</span>
+  <div class="settings-section">
+    <p class="settings-section-title">Confetti:</p>
+    <div class="settings-section-rows">
+      <div class="control-row">
+        <label for="confettiEnabled">Confetti:</label>
+        <div class="font-picker-row">
+          <!-- Fires the local canvas preview AND pushes a real one-shot
+               song-ended event to the backend (see the click handler below),
+               so a connected render.html/OBS Browser Source shows it too —
+               with a guaranteed-perfect score so it always fires regardless
+               of the configured Trigger At, matching "test" intent (a real
+               song run is what actually exercises the real threshold). -->
+          <button class="load-fonts-btn" id="testConfettiBtn" type="button">Test Confetti</button>
+          <input type="checkbox" id="confettiEnabled" class="vs-checkbox" checked />
+        </div>
+      </div>
+      <div class="settings-row-pair">
+        <div class="control-row">
+          <label for="confettiDuration">Confetti Duration:</label>
+          <span class="fontsize-field">
+            <button type="button" class="step-btn" id="confettiDurationMinus" aria-label="Decrease confetti duration">−</button>
+            <input type="number" id="confettiDuration" min="1" max="20" step="0.5" value="7" aria-label="Confetti duration in seconds" />
+            <button type="button" class="step-btn" id="confettiDurationPlus" aria-label="Increase confetti duration">+</button>
+            <span class="unit">s</span>
+          </span>
+        </div>
+        <div class="control-row">
+          <label for="confettiTriggerAt">Confetti Trigger At:</label>
+          <span class="fontsize-field">
+            <button type="button" class="step-btn" id="confettiTriggerAtMinus" aria-label="Decrease confetti trigger percentage">−</button>
+            <input type="number" id="confettiTriggerAt" min="0.1" max="100" step="0.1" value="100" aria-label="Score percentage that triggers confetti" />
+            <button type="button" class="step-btn" id="confettiTriggerAtPlus" aria-label="Increase confetti trigger percentage">+</button>
+            <span class="unit">%</span>
+          </span>
+        </div>
+      </div>
+      <div class="control-row control-row--slider">
+        <label for="confettiVolume">Confetti Amount:</label>
+        <div class="vs-slider-row">
+          <input type="range" id="confettiVolume" min="0" max="1" step="0.05" value="0.1" aria-label="Confetti amount, light to screen-filling" />
+        </div>
+      </div>
     </div>
   </div>
   </div>
@@ -2006,11 +2206,7 @@
          way, just gated once here instead of per row. -->
     <div class="control-row">
       <label for="customizeEnableToggle">Enable Customizations:</label>
-      <span class="switch">
-        <input type="checkbox" id="customizeEnableToggle" aria-label="Use this element's own custom settings instead of Global" />
-        <span class="track"></span>
-        <span class="thumb"></span>
-      </span>
+      <input type="checkbox" id="customizeEnableToggle" class="vs-checkbox" aria-label="Use this element's own custom settings instead of Global" />
     </div>
     <div id="customizeSettingsRows"></div>
   </div>
@@ -3815,6 +4011,12 @@
     // on an actual flip, regardless of which caller (import, preset
     // switch, Reset) got us here.
     if (!!visuals.marqueeBulbFlickerRandom !== bulbFlickerRandomBefore) resyncAllBulbDelays();
+    // Every slider .value above was set directly, not via user input, so
+    // it never fired the 'input' event syncSliderFill() listens for —
+    // without this, fill bars/value readouts would show stale numbers
+    // after an Import, a preset switch, or Reset until the user happened
+    // to touch each slider themselves.
+    document.querySelectorAll('#globalSettingsTab input[type="range"]').forEach(syncSliderFill);
   }
   // ============================================================
   // 4. Ticker (scroll-on-overflow, or Marquee Scroll) — depended on by
@@ -5490,21 +5692,19 @@
       return input;
     }
     if (setting.type === 'checkbox') {
-      const wrap = document.createElement('span');
-      wrap.className = 'switch' + (useCustom ? '' : ' is-disabled');
+      // .vs-checkbox is a native input styled directly (see its CSS) —
+      // no wrapper span needed, unlike the .switch pill it replaces here,
+      // so :disabled dimming is just the browser's own state, no manual
+      // is-disabled class to keep in sync.
       const input = document.createElement('input');
       input.type = 'checkbox';
+      input.className = 'vs-checkbox';
       input.checked = !!eff[key];
       input.disabled = !useCustom;
-      const track = document.createElement('span');
-      track.className = 'track';
-      const thumb = document.createElement('span');
-      thumb.className = 'thumb';
-      wrap.append(input, track, thumb);
       input.addEventListener('change', () => {
         if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, input.checked);
       });
-      return wrap;
+      return input;
     }
     if (setting.type === 'font') {
       const select = document.createElement('select');
@@ -5566,6 +5766,12 @@
       row.append(label, controlCell);
       container.appendChild(row);
     });
+    // Full rebuild above means fresh <input type=range> elements every
+    // time — enhanceSlider() no-ops harmlessly on anything already
+    // enhanced, but these never are, so this always (re)paints fill+value
+    // for the new nodes (see enhanceSlider's own comment, near the Global
+    // tab's equivalent call site).
+    container.querySelectorAll('input[type="range"]').forEach(enhanceSlider);
   }
   // Shared by both places custom text can be edited — the Custom Text
   // list's own field, and (redundantly, on purpose — the user asked for
@@ -5975,6 +6181,43 @@
     heightInput.value = (parseInt(heightInput.value, 10) || 200) + 10;
     applyStageSize();
   });
+  // Visual Settings restyle — fill bar + min/max/value readout for every
+  // range slider in the panel. Purely additive: each slider keeps its own
+  // real listener (below, and in Customize's buildCustomizeControl) doing
+  // the actual work; this only ever ADDS a second 'input' listener that
+  // paints --fill and the value text, never replaces anything.
+  function syncSliderFill(input) {
+    const min = parseFloat(input.min), max = parseFloat(input.max), val = parseFloat(input.value);
+    const pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
+    input.style.setProperty('--fill', pct + '%');
+    if (input._vsValueEl) input._vsValueEl.textContent = String(val);
+  }
+  // Called once per slider — Global tab's at boot, Customize tab's fresh
+  // ones after every renderCustomizeSettingRows() rebuild (see its own
+  // call site below). Inserts min/max/value as plain siblings around the
+  // input itself, so it works whether the input sits bare in a
+  // .vs-slider-row (forces its own line, see .control-row--slider CSS) or
+  // nested in a .font-picker-row alongside a color swatch (Element/
+  // Background Color-Transparency) — no assumption about a wrapper.
+  function enhanceSlider(input) {
+    if (input.dataset.vsEnhanced) { syncSliderFill(input); return; }
+    input.dataset.vsEnhanced = '1';
+    const min = document.createElement('span');
+    min.className = 'vs-slider-min';
+    min.textContent = input.min;
+    const max = document.createElement('span');
+    max.className = 'vs-slider-max';
+    max.textContent = input.max;
+    const value = document.createElement('span');
+    value.className = 'vs-slider-value';
+    input.insertAdjacentElement('beforebegin', min);
+    input.insertAdjacentElement('afterend', max);
+    max.insertAdjacentElement('afterend', value);
+    input._vsValueEl = value;
+    input.addEventListener('input', () => syncSliderFill(input));
+    syncSliderFill(input);
+  }
+  document.querySelectorAll('#globalSettingsTab input[type="range"]').forEach(enhanceSlider);
   // Element background — drives .obj's rgb(R G B / A) background (see its
   // comment). Color and opacity are separate inputs but both write into
   // the same rgb(R G B / A) pair, same split as --accent/--accent-rgb and
