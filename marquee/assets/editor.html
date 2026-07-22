@@ -3399,6 +3399,14 @@
       visuals.marqueeBulbGap = clamp(v.marqueeBulbGap, 5, 60);
       document.getElementById('marqueeBulbGap').value = visuals.marqueeBulbGap;
     }
+    if (typeof v.marqueeBulbSpeedElements === 'number' && Number.isFinite(v.marqueeBulbSpeedElements)) {
+      visuals.marqueeBulbSpeedElements = clamp(v.marqueeBulbSpeedElements, 10, 300);
+      document.getElementById('marqueeBulbSpeedElements').value = visuals.marqueeBulbSpeedElements;
+    }
+    if (typeof v.marqueeBulbSpeedLayout === 'number' && Number.isFinite(v.marqueeBulbSpeedLayout)) {
+      visuals.marqueeBulbSpeedLayout = clamp(v.marqueeBulbSpeedLayout, 10, 300);
+      document.getElementById('marqueeBulbSpeedLayout').value = visuals.marqueeBulbSpeedLayout;
+    }
     if (typeof v.marqueeBulbScroll === 'boolean') {
       visuals.marqueeBulbScroll = v.marqueeBulbScroll;
       document.getElementById('marqueeBulbScroll').checked = v.marqueeBulbScroll;
@@ -5612,6 +5620,17 @@
   // Same reasoning as Bulb Size above.
   document.getElementById('marqueeBulbGap').addEventListener('input', (e) => {
     visuals.marqueeBulbGap = parseFloat(e.target.value);
+    setupAllTickers();
+  });
+  // Independent Elements/Layout bulb ring speeds — see setBulbLoop's own
+  // comment for how each is picked per-container. Same plain-slider
+  // pattern as Bulb Size/Gap above.
+  document.getElementById('marqueeBulbSpeedElements').addEventListener('input', (e) => {
+    visuals.marqueeBulbSpeedElements = parseFloat(e.target.value);
+    setupAllTickers();
+  });
+  document.getElementById('marqueeBulbSpeedLayout').addEventListener('input', (e) => {
+    visuals.marqueeBulbSpeedLayout = parseFloat(e.target.value);
     setupAllTickers();
   });
   document.getElementById('marqueeBulbScroll').addEventListener('change', (e) => {
