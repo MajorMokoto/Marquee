@@ -37,6 +37,13 @@
       /* warm ivory */
     --paper-dim: #b8a88c;
   /* muted warm tan */
+    /* Text Color control's own var — separate from --paper (still the
+       default value, and still what editor-only UI chrome reads directly;
+       see the Text Color control-row's own JS comment for why only the
+       rendered overlay's content text — .title/.stat-value/.custom-text —
+       reads --text-color instead of --paper). Defaults equal to --paper so
+       nothing changes visually until the control is actually touched. */
+    --text-color: #f3e9d8;
     /* NOT var(--gold) — --gold is shared UI chrome (hero glow, switch
        toggles, focus outlines) unrelated to the overlay's accent theme;
        tying --accent to it would mean this swatch's color quietly follows
@@ -56,12 +63,14 @@
     --chip-rgb: 0 0 0;
     --chip-alpha: 0;
     /* Whole-canvas solid background (see .stage-canvas-bg) — separate
-       from --chip-alpha above, which is per-element. Alpha 0 by default
-       so nothing changes until the Background Transparency control is
-       actually raised; .stage's real transparency (see its own comment)
-       stays the default behavior. */
+       from --chip-alpha above, which is per-element. Matches Standard
+       preset's defaultVisuals.canvasBgAlpha (1, opaque) so a fresh page
+       load renders the same as switching to/exporting Standard, since
+       nothing runs applyImportedVisuals(defaultVisuals) on initial load —
+       this hardcoded value and the input's own static value= (see
+       #canvasBgOpacity) are what a fresh load actually starts from. */
     --canvas-bg-rgb: 0 0 0;
-    --canvas-bg-alpha: 0;
+    --canvas-bg-alpha: 1;
     /* Path/Tuning/Year/Score/Now Playing's caption text (see .stat-label
        and .eyebrow-standalone) — the "Element Head Size" control. Absolute
        px, not em, so it's one uniform size across all of them regardless
@@ -69,8 +78,11 @@
     --element-head-size: 10px;
     /* Drives both the per-element border width AND the canvas ring's
        width (see .obj and .stage) — the Border Thickness control (0 =
-       no border, the on/off is just this reaching 0). */
-    --border-width: 1px;
+       no border, the on/off is just this reaching 0). Matches Standard
+       preset's defaultVisuals.borderWidth (1.2) — see the --canvas-bg-alpha
+       comment above for why this hardcoded default has to stay in sync
+       by hand. */
+    --border-width: 1.2px;
     /* Corner rounding, shared by the canvas itself (.stage) and every
        element (.obj) — the "Edge Rounding" control. Range is 0 (sharp) to
        a modest cap (still reads as "soft," not a pill/circle shape). */
@@ -456,6 +468,29 @@
     transform: rotate(45deg);
     transform-origin: right center;
   }
+  /* Element Outlines toggle's icon — a small dashed square standing in for
+     the dashed edit-mode outline it represents. Unlike the lock/zoom icons
+     (which always show, just changing shape/symbol), this one only makes
+     sense while outlines are ON, so it's hidden outright — not just
+     restyled — when the toggle is off (see the outlinesToggle 'change'
+     handler, which mirrors the label/body-class toggle it already does). */
+  .outline-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    box-sizing: border-box;
+    border: 1.5px dashed #f2f2f2;
+    border-radius: 2px;
+  }
+  .outline-icon.icon-hidden { visibility: hidden; }
+  /* Dims the whole Outlines pill (label text + icon) when Lock Layout
+     disables its checkbox — the checkbox itself already dims via
+     .vs-checkbox:disabled, this covers its label siblings that rule
+     doesn't reach. See the editModeInput 'change' handler, which is what
+     actually sets outlinesToggle.disabled. */
+  .edit-toggle.toggle-disabled .label,
+  .edit-toggle.toggle-disabled .outline-icon:not(.icon-hidden) { opacity: 0.45; }
   .zoom-icon-symbol {
     position: relative;
     font-size: 9px;
@@ -471,11 +506,12 @@
      otherwise poke through, giving the closed state the look of the
      shackle disappearing into the lock body. Unlike the zoom icon's +/−
      (which shows the action a click will perform next), this icon shows
-     CURRENT state: .unlocked (default — editMode starts unlocked) rotates
-     +shifts the shackle up and to the right around its bottom-left
-     corner, swinging it open the way a real undone padlock's shackle
-     pivots; the class is removed (closed shackle) once the layout is
-     actually locked. See the editModeInput 'change' handler. */
+     CURRENT state: .unlocked (editMode true) rotates the shackle
+     counterclockwise around its bottom-left corner (the leg that stays
+     seated in the lock body), lifting the free right side up and away from
+     the body the way a real undone padlock's shackle pivots; the class is
+     removed (closed shackle) once the layout is actually locked. See the
+     editModeInput 'change' handler. */
   .lock-icon {
     position: relative;
     display: inline-flex;
@@ -513,7 +549,7 @@
     box-sizing: border-box;
     background: var(--vs-card-bg);
   }
-  .lock-icon.unlocked::before { transform: translateX(4px) rotate(25deg); }
+  .lock-icon.unlocked::before { transform: rotate(-30deg); }
   /* Attention flash for the Lock Layout pill — triggered from JS
      (flashLockToggle) when the user clicks the stage while it's locked,
      so there's a visible answer to "why isn't this responding to my
@@ -527,6 +563,27 @@
     50% { box-shadow: 0 0 0 3px var(--vs-accent); }
   }
   .edit-toggle.lock-flash { animation: lock-toggle-flash 0.6s ease-in-out; }
+  /* Same attention flash, reused for the Marquee Text Scroll row — see
+     flashMarqueeScrollToggle, triggered when clicking a disabled Marquee
+     Stars row while Scroll is off. */
+  .feature-row.lock-flash { animation: lock-toggle-flash 0.6s ease-in-out; }
+  /* No separator line under Text Scroll — every other .control-row gets
+     one (see its own comment: a dashed "leader line" between rows, turning
+     var(--vs-accent) red on hover), but Text Scroll and Stars directly
+     below it are meant to read as one grouped pair (they highlight
+     together on hover — see wireMarqueeGroupHover/.group-hover), so the
+     normal row divider between them was fighting that, plus turning red on
+     hover for no reason tied to either row's own state. Text Scroll is
+     pinned directly before Stars regardless of the Marquee Effects list's
+     otherwise-alphabetical order (see the pooled sort's manual exception,
+     Customize tab JS) — whichever row is directly ABOVE its partner is the
+     one that needs its own divider removed. !important because
+     .control-row's own border-bottom (defined later in this stylesheet,
+     same 1-class specificity) and .control-row:hover's border-color
+     (higher specificity still) would otherwise win by source order/
+     specificity — same reasoning as the other !important uses in this
+     file. */
+  .marquee-scroll-row, .marquee-scroll-row:hover { border-bottom: none !important; }
   .reset-btn {
     position: relative;
     width: var(--toolbar-item-w);
@@ -778,9 +835,6 @@
        on/off control now; there used to be a separate Element Borders
        On/Off toggle too, removed as redundant with just setting
        thickness to 0. */
-    border-width: var(--border-width);
-    border-style: solid;
-    border-color: rgb(var(--accent-rgb) / 0.5);
     border-radius: var(--edge-rounding);
     box-shadow: 0 10px 24px -12px rgba(0, 0, 0, calc(var(--chip-alpha) * 0.75));
     backdrop-filter: blur(calc(var(--chip-alpha) * 6px));
@@ -808,6 +862,33 @@
        font-size concept; it keeps its own scale-based resize instead). */
     font-size: 16px;
   }
+  /* Border Thickness ring, as a ::after overlay instead of a real `border`
+     property — mirrors render.html's own .obj::after (see its comment for
+     the full reasoning): a real border paints UNDER an element's own
+     children, so text or Album Art's <img> can visually cover part of it.
+     A ::after is always painted last for its box, so this ring stays on
+     top of everything inside the element. inset:0 draws it flush with the
+     box's edge, same as the real border used to, but — like the stage's
+     own ring — takes no layout space, so removing the real border doesn't
+     change any element's content area. pointer-events:none so it never
+     blocks drag/resize on the element beneath it. */
+  .obj::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--border-width) solid rgb(var(--accent-rgb) / 0.5);
+    border-radius: var(--edge-rounding);
+    pointer-events: none;
+  }
+  /* Album Art resizes via transform:scale() (see .obj-art's resize mode,
+     and the --outline-w comment just below for the same problem on the
+     edit-mode outline) — that transform scales this ::after ring right
+     along with the box, so at the default ~2x art scale its border
+     rendered ~2x thicker than every other element's. --art-scale holds
+     the raw scale factor (set in applyLayout/the scale-mode resize
+     handler); dividing border-width by it here cancels that out so Album
+     Art's border reads as the same thickness as everywhere else. */
+  .obj-art::after { border-width: calc(var(--border-width) / var(--art-scale, 1)); }
   /* offset:0 so this hugs the element's actual box exactly — it used to
      sit 3px outside, which made every element look bigger in edit mode
      than it actually renders. Width is --outline-w (default 1px) rather
@@ -906,7 +987,7 @@
   .title {
     /* font-family inherited from .obj — do not set it here */
     margin: 0 0 3px; font-weight: 900;
-    font-size: 1.2em; line-height: 1.15; color: var(--paper); letter-spacing: -0.01em;
+    font-size: 1.2em; line-height: 1.15; color: var(--text-color); letter-spacing: -0.01em;
     /* Used to have transform: scaleX(0.93) (a condensed-text look) — removed
        because a transform doesn't change the box's own width, only how the
        text paints inside it, so the missing 7% just showed up as extra
@@ -1007,9 +1088,12 @@
     to
    { transform: translateX(calc(-1 * var(--marquee-unit, 100px))); }
   }
-  /* Marquee flair — both opt-in per their own Visual Settings toggle,
-     nested under (only meaningful with) Marquee Scroll itself; JS only
-     ever adds these two classes alongside .marquee-scroll-active. */
+  /* Marquee flair — both opt-in per their own Visual Settings toggle. See
+     render.html's own comment here (mirrored): Marquee Stars stays
+     Marquee-Scroll-only (its checkbox greys out/force-unchecks when Scroll
+     is off — see updateMarqueeSparkleLockState), but Edge Fade doesn't —
+     setupBounceTicker applies it to the plain bounce-on-overflow ticker
+     too. */
   .ticker.marquee-edge-fade-active {
     /* Percentage-based, not fixed px, so the fade stays proportional
        whether the element is tiny or huge instead of eating a bigger
@@ -1327,7 +1411,7 @@
     font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 0.98em;
-    color: var(--paper);
+    color: var(--text-color);
   }
   /* Score: accuracy percentage (to the hundredth) is the prominent figure;
      the previous attempt's percentage is secondary, shown smaller
@@ -1367,14 +1451,17 @@
      does; the track (flex:1, basis 0%) still absorbs most of the squeeze
      in the common case, so the time digits only start scrolling once the
      box is genuinely too narrow for both. */
-  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; }
+  /* Horizontal padding keeps the elapsed/duration values from sitting
+     flush against .obj-progress's own edge — see render.html's own .time
+     rule for the full reasoning (mirrored here). */
+  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; padding: 0 6px; }
   .progress-track { flex: 1; height: 3px; background: rgba(243, 233, 216, 0.14); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 35%; background: linear-gradient(90deg, var(--accent), var(--bulb-hot)); }
   /* Custom user-added text objects — same ticker/no-truncation behavior as
      the built-in labels, plus a delete button (built-ins can only be
      hidden via the Elements list; custom ones can be removed outright). */
   .obj-custom { width: max-content; }
-  .custom-text { display: block; font-size: 0.9em; font-weight: 600; color: var(--paper); }
+  .custom-text { display: block; font-size: 0.9em; font-weight: 600; color: var(--text-color); }
   /* Bold override: font-weight ALONE is not reliable here, because the
      title font is now "any font installed on the user's system" (see the
      font picker) — many system/display fonts (Impact, Arial Black, Comic
@@ -1496,7 +1583,7 @@
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--vs-text-dim);
-    font-size: 0.85rem;
+    font-size: 20px;
     font-weight: 700;
     padding: 10px 14px;
     cursor: pointer;
@@ -1519,7 +1606,7 @@
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--vs-text-dim);
-    font-size: 0.78rem;
+    font-size: 20px;
     font-weight: 700;
     padding: 6px 4px 8px;
     cursor: pointer;
@@ -1592,6 +1679,17 @@
      untouched rather than deleted since removing genuinely-unused CSS
      isn't part of this change. */
   .panel .control-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--vs-accent);
+  }
+  /* Marquee Text Scroll + Marquee Stars read as one grouped pair (see
+     .marquee-scroll-row's own comment) — so hovering EITHER row should
+     highlight both, not just the one under the cursor. .group-hover is
+     toggled on both rows together by JS (wireMarqueeGroupHover) on
+     mouseenter/mouseleave of either. Same visual as the real :hover rule
+     above, just driven by a class instead of the pseudo-class so it can
+     apply to a row the cursor isn't actually over. */
+  .panel .control-row.group-hover {
     background: rgba(255, 255, 255, 0.04);
     border-color: var(--vs-accent);
   }
@@ -1713,6 +1811,12 @@
     gap: 8px;
     margin-top: 17px;
   }
+  /* Dims a feature-row-toggle's label to match its checkbox's own
+     :disabled dimming (see .panel .vs-checkbox:disabled) — used for
+     Marquee Stars specifically, greyed out via updateMarqueeSparkleLockState
+     whenever Marquee Scroll is off, since the checkbox rule alone doesn't
+     reach its label sibling. */
+  .panel .feature-row-toggle.toggle-disabled label { opacity: 0.45; }
   .panel .feature-row-sliders {
     flex: 0 0 260px;
     width: 260px;
@@ -2040,8 +2144,8 @@
   }
   .add-custom-row label { font-size: 0.85rem; color: var(--paper); font-weight: 600; flex: none; }
   .swatches { display: flex; gap: 8px; }
-  .swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
-  .swatch[aria-pressed="true"] { border-color: var(--vs-accent); }
+  .swatch { width: 24px; height: 24px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; }
+  .swatch[aria-pressed="true"] { border-color: #ffffff; }
   input[type="range"] { width: 160px; accent-color: var(--gold); }
   .font-picker-row { display: flex; align-items: center; gap: 8px; }
   /* .marquee-bulb-mode-select and #fontPicker's own look now comes from
@@ -2361,7 +2465,12 @@
     padding: 7px 10px;
   }
   .custom-text-row .text-input { flex: 1; min-width: 0; }
-  .empty-note { font-size: 0.78rem; color: var(--paper-dim); font-style: italic; margin: 0; }</style><h1 class="sr-only">Welcome to the Marquee</h1><div class="hero" aria-hidden="true">
+  .empty-note { font-size: 0.78rem; color: var(--paper-dim); font-style: italic; margin: 0; }</style><!-- TEMPORARY — 1920x1080 guide overlay, remove once the settings menu's
+     fit at 1080p is confirmed. Fixed to the viewport's own top-left
+     (not the page, which can be taller/scroll) so it always marks exactly
+     where a 1920x1080 monitor's edge would fall regardless of scroll
+     position. pointer-events:none so it never blocks clicking through to
+     the real UI underneath. --><div id="tempResolutionGuide1080" aria-hidden="true" style="position:fixed;top:0;left:0;width:1920px;height:1080px;border:3px dashed #ff2d55;box-sizing:border-box;pointer-events:none;z-index:99999;"><span style="position:absolute;top:4px;left:4px;background:#ff2d55;color:#fff;font:700 12px/1.4 sans-serif;padding:2px 6px;border-radius:3px;">1920×1080</span></div><h1 class="sr-only">Welcome to the Marquee</h1><div class="hero" aria-hidden="true">
   <div class="hero-bulbs">
     <span class="hero-bulb" style="animation-delay:0s"></span>
     <span class="hero-bulb" style="animation-delay:.3s"></span>
@@ -2406,10 +2515,10 @@
   </div></div><div class="toolbar">
   <div class="toolbar-toggles">
     <label class="edit-toggle">
-      <span class="label" id="lockLayoutLabel">Lock Layout:</span>
+      <span class="label" id="lockLayoutLabel">Unlock Layout:</span>
       <span class="toggle-icon-group">
-        <span class="lock-icon unlocked" id="lockIcon" aria-hidden="true"></span>
-        <input type="checkbox" id="editMode" class="vs-checkbox" />
+        <span class="lock-icon" id="lockIcon" aria-hidden="true"></span>
+        <input type="checkbox" id="editMode" class="vs-checkbox" checked />
       </span>
     </label>
     <label class="edit-toggle">
@@ -2421,7 +2530,10 @@
     </label>
     <label class="edit-toggle">
       <span class="label" id="outlinesLabel">Outlines: On</span>
-      <input type="checkbox" id="outlinesToggle" class="vs-checkbox" checked />
+      <span class="toggle-icon-group">
+        <span class="outline-icon" id="outlineIcon" aria-hidden="true"></span>
+        <input type="checkbox" id="outlinesToggle" class="vs-checkbox" checked />
+      </span>
     </label>
   </div>
   <p class="obs-note">
@@ -2466,7 +2578,7 @@
     </div>
   </div></div><div class="drag-hint" id="dragHint">
   <p>This is your layout as it will be sent out. Change layout size and other visuals below:</p>
-  <p>Click to move/resize any element in the layout panel below:</p></div><div class="stage editing" id="stage">
+  <p>Click to move/resize any element in the layout panel below:</p></div><div class="stage" id="stage">
   <div class="stage-bg" aria-hidden="true"></div>
   <div class="stage-canvas-bg" aria-hidden="true"></div>
   <div class="stage-grid" aria-hidden="true"></div>
@@ -2533,7 +2645,6 @@
   <button type="button" class="panel-tab" id="panelTabElementsBtn" role="tab" aria-selected="false" aria-controls="elementsPanel">Elements</button>
   <button type="button" class="panel-tab" id="panelTabImportExportBtn" role="tab" aria-selected="false" aria-controls="importExportPanel">Import/Export</button>
 </div><div class="panel" id="visualSettingsPanel" data-tab="visual" role="tabpanel">
-  <p class="panel-title">VISUAL SETTINGS:</p>
   <!-- Global applies to every element identically, exactly like this
        whole panel always has. Customize is per-element: pick one element
        from its own dropdown, then flip individual settings' own
@@ -2569,7 +2680,7 @@
         <div class="control-row control-row--slider">
           <label for="borderWidth">Border Thickness:</label>
           <div class="vs-slider-row">
-            <input type="range" id="borderWidth" min="0" max="6" step="1" value="1" data-min-label="None" data-max-label="Thick" />
+            <input type="range" id="borderWidth" min="0" max="6" step="0.3" value="1.2" data-min-label="None" data-max-label="Thick" />
           </div>
         </div>
         <div class="control-row control-row--slider">
@@ -2599,190 +2710,10 @@
           </span>
         </div>
       </div>
-    </div>
-  </div>
-  <div class="settings-section">
-    <p class="settings-section-title">Color &amp; Type:</p>
-    <div class="settings-section-rows">
-      <div class="control-row">
-        <label for="opacity">Element Color/Transparency:</label>
-        <div class="font-picker-row">
-          <input type="color" class="color-input" id="chipColor" value="#000000" aria-label="Element background color" />
-          <input type="range" id="opacity" min="0" max="1" step="0.02" value="0" />
-        </div>
-      </div>
-      <div class="control-row">
-        <label for="canvasBgOpacity">Background Color/Transparency:</label>
-        <div class="font-picker-row">
-          <input type="color" class="color-input" id="canvasBgColor" value="#000000" aria-label="Background color" />
-          <input type="range" id="canvasBgOpacity" min="0" max="1" step="0.02" value="0" />
-        </div>
-      </div>
-      <div class="control-row">
-        <label>Accent Color:</label>
-        <div class="swatches" id="swatches">
-          <input type="color" class="color-input" id="accentColorPicker" value="#ff8200" aria-label="Custom accent color" />
-          <button class="swatch" style="background:#a8a8a8" data-accent="#a8a8a8" data-accent-rgb="168 168 168" aria-pressed="false" aria-label="Silver"></button>
-          <button class="swatch" style="background:#5fbf8a" data-accent="#5fbf8a" data-accent-rgb="95 191 138" aria-pressed="false" aria-label="Emerald"></button>
-          <button class="swatch" style="background:#4fa7e0" data-accent="#4fa7e0" data-accent-rgb="79 167 224" aria-pressed="false" aria-label="Electric blue"></button>
-          <button class="swatch" style="background:#ff8200" data-accent="#ff8200" data-accent-rgb="255 130 0" aria-pressed="true" aria-label="Tangerine"></button>
-          <button class="swatch" style="background:#e0568c" data-accent="#e0568c" data-accent-rgb="224 86 140" aria-pressed="false" aria-label="Hot magenta"></button>
-          <button class="swatch" style="background:#9c3a4a" data-accent="#9c3a4a" data-accent-rgb="156 58 74" aria-pressed="false" aria-label="Garnet"></button>
-          <button class="swatch" style="background:#804200" data-accent="#804200" data-accent-rgb="128 66 0" aria-pressed="false" aria-label="Burnt Orange"></button>
-        </div>
-      </div>
-      <div class="control-row">
-        <label for="fontPicker">Element Font:</label>
-        <div class="font-picker-row">
-          <button class="load-fonts-btn" id="loadSystemFonts" type="button">Load System Fonts</button>
-          <div class="arrowed-select-wrap">
-            <select id="fontPicker" class="arrowed-select"></select>
-          </div>
-        </div>
-      </div>
-      <p class="font-picker-note" id="fontPickerNote"></p>
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="boldText">Bold Text:</label>
-          <input type="checkbox" id="boldText" class="vs-checkbox" />
-        </div>
-        <div class="feature-row-sliders"></div>
-      </div>
-    </div>
-  </div>
-  <!-- No section title here on purpose — the first row's own checkbox
-       label ("Marquee Text Scroll:") already reads as the section header,
-       so a .settings-section-title above it would just repeat the same
-       text twice in a row. Marquee Bulbs and Confetti below have the same
-       treatment for the same reason. -->
-  <div class="settings-section">
-    <div class="settings-section-rows">
-      <!-- The rest of this section only does anything while Marquee
-           Scroll itself is on — flair for that effect, not independent
-           settings. Feature rows (checkbox left, its own slider(s) right)
-           ordered main toggle first, then alphabetical by name — see the
-           .feature-row CSS comment and CUSTOMIZE_SECTION_ORDER's sibling
-           logic in the script for why this mirrors the Customize tab. -->
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeScroll">Marquee Text Scroll:</label>
-          <input type="checkbox" id="marqueeScroll" class="vs-checkbox" aria-label="Continuously scroll Song Title/Artist, Tuning, Path, and Year like a marquee sign" />
-        </div>
-        <div class="feature-row-sliders">
-          <div class="feature-row-slider">
-            <label for="marqueeScrollSpeed">Marquee Scroll Speed:</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeScrollSpeed" min="10" max="300" step="10" value="80" aria-label="Marquee scroll speed for Song Title/Artist, Tuning, Path, and Year, in pixels per second" data-min-label="Slow" data-max-label="Fast" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeSparkle">Marquee Stars:</label>
-          <input type="checkbox" id="marqueeSparkle" class="vs-checkbox" aria-label="Show a small twinkling cluster of stars in the gap between repeated scrolling text" />
-        </div>
-        <div class="feature-row-sliders">
-          <div class="feature-row-slider">
-            <label for="marqueeSparkleSize">Marquee Star Size:</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeSparkleSize" min="4" max="64" step="1" value="10" aria-label="Size of the twinkling stars, in pixels — the same size on every element regardless of its own font size" data-min-label="Small" data-max-label="Large" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Zero-slider checkbox — nothing to adjust here, so it sits at
-           the bottom of the section rather than a prominent position. -->
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeEdgeFade">Marquee Edge Fade:</label>
-          <input type="checkbox" id="marqueeEdgeFade" class="vs-checkbox" aria-label="Fade scrolling text at the left/right edges instead of a hard clip" />
-        </div>
-        <div class="feature-row-sliders"></div>
-      </div>
-    </div>
-  </div>
-  <!-- No section title here either — same reason as Marquee Text Scroll
-       above: the first row's own checkbox/select label already reads as
-       the section header. -->
-  <div class="settings-section">
-    <div class="settings-section-rows">
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeBulbMode">Marquee Bulbs:</label>
-          <div class="arrowed-select-wrap">
-            <select id="marqueeBulbMode" class="marquee-bulb-mode-select arrowed-select" aria-label="Which areas show the scrolling marquee light bulb ring">
-              <option value="off">Off</option>
-              <option value="all">All (Elements + Layout)</option>
-              <option value="elements">Elements Only</option>
-              <option value="layout">Layout Only</option>
-            </select>
-          </div>
-        </div>
-        <div class="feature-row-sliders">
-          <div class="feature-row-slider">
-            <label for="marqueeBulbSize">Marquee Bulb Size:</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeBulbSize" min="1.5" max="55" step="0.5" value="2.8" aria-label="Diameter of the scrolling marquee light bulbs" data-min-label="Small" data-max-label="Large" />
-            </div>
-          </div>
-          <div class="feature-row-slider">
-            <label for="marqueeBulbGap">Marquee Bulb Gap:</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeBulbGap" min="5" max="60" step="1" value="11" aria-label="Gap between one bulb and the next, in pixels, independent of Bulb Size" data-min-label="Small" data-max-label="Large" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeBulbFlicker">Marquee Bulb Flicker:</label>
-          <input type="checkbox" id="marqueeBulbFlicker" class="vs-checkbox" aria-label="Flicker the marquee light bulbs like an old theater sign" />
-        </div>
-        <div class="feature-row-sliders">
-          <div class="feature-row-slider">
-            <label for="marqueeBulbFlickerIntensity">Marquee Bulb Flicker Intensity:</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0.6" aria-label="How deep the marquee bulb flicker dips" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeBulbScroll">Marquee Bulb Scroll:</label>
-          <input type="checkbox" id="marqueeBulbScroll" class="vs-checkbox" checked aria-label="Scroll the marquee light bulbs; turn off to leave them static in place" />
-        </div>
-        <div class="feature-row-sliders">
-          <div class="feature-row-slider">
-            <label for="marqueeBulbSpeedElements">Marquee Bulb Speed (Elements):</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeBulbSpeedElements" min="10" max="300" step="10" value="80" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
-            </div>
-          </div>
-          <div class="feature-row-slider">
-            <label for="marqueeBulbSpeedLayout">Marquee Bulb Speed (Layout):</label>
-            <div class="vs-slider-row">
-              <input type="range" id="marqueeBulbSpeedLayout" min="10" max="300" step="10" value="80" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Zero-slider checkbox — nothing to adjust here, so it sits at
-           the bottom of the section rather than a prominent position. -->
-      <div class="control-row feature-row">
-        <div class="feature-row-toggle">
-          <label for="marqueeBulbFlickerRandom">Marquee Bulb Flicker Random:</label>
-          <input type="checkbox" id="marqueeBulbFlickerRandom" class="vs-checkbox" aria-label="Flicker every element's bulbs on its own random timing instead of all in sync; turning this off resyncs everyone to the same shared timing" />
-        </div>
-        <div class="feature-row-sliders"></div>
-      </div>
-    </div>
-  </div>
-  <!-- No section title here either — same reason as Marquee Text Scroll/
-       Marquee Bulbs above. -->
-  <div class="settings-section">
-    <div class="settings-section-rows">
+      <!-- Confetti, moved into Layout & Canvas from its own separate card
+           per request — Layout & Canvas already covers other whole-canvas
+           one-off effects (Fade Out Time), so Confetti fits the same
+           bucket rather than needing its own untitled card. -->
       <div class="control-row feature-row">
         <div class="feature-row-toggle">
           <label for="confettiEnabled">Confetti:</label>
@@ -2799,7 +2730,7 @@
           <div class="feature-row-slider">
             <label for="confettiVolume">Confetti Amount:</label>
             <div class="vs-slider-row">
-              <input type="range" id="confettiVolume" min="0" max="1" step="0.05" value="0.1" aria-label="Confetti amount, light to screen-filling" data-min-label="Little" data-max-label="Lot" />
+              <input type="range" id="confettiVolume" min="0" max="1" step="0.05" value="0.5" aria-label="Confetti amount, light to screen-filling" data-min-label="Little" data-max-label="Lot" />
             </div>
           </div>
         </div>
@@ -2825,6 +2756,186 @@
             <button type="button" class="step-btn" id="confettiTriggerAtPlus" aria-label="Increase confetti trigger percentage">+</button>
             <span class="unit">%</span>
           </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-section">
+    <p class="settings-section-title">Color &amp; Type:</p>
+    <div class="settings-section-rows">
+      <div class="control-row">
+        <label for="opacity">Element Color/Transparency:</label>
+        <div class="font-picker-row">
+          <input type="color" class="color-input" id="chipColor" value="#000000" aria-label="Element background color" />
+          <input type="range" id="opacity" min="0" max="1" step="0.02" value="0" />
+        </div>
+      </div>
+      <div class="control-row">
+        <label for="canvasBgOpacity">Background Color/Transparency:</label>
+        <div class="font-picker-row">
+          <input type="color" class="color-input" id="canvasBgColor" value="#000000" aria-label="Background color" />
+          <input type="range" id="canvasBgOpacity" min="0" max="1" step="0.02" value="1" />
+        </div>
+      </div>
+      <div class="control-row">
+        <label>Accent Color:</label>
+        <div class="swatches" id="swatches">
+          <input type="color" class="color-input" id="accentColorPicker" value="#ff8200" aria-label="Custom accent color" />
+          <button class="swatch" style="background:#a8a8a8" data-accent="#a8a8a8" data-accent-rgb="168 168 168" aria-pressed="false" aria-label="Silver"></button>
+          <button class="swatch" style="background:#5fbf8a" data-accent="#5fbf8a" data-accent-rgb="95 191 138" aria-pressed="false" aria-label="Emerald"></button>
+          <button class="swatch" style="background:#4fa7e0" data-accent="#4fa7e0" data-accent-rgb="79 167 224" aria-pressed="false" aria-label="Electric blue"></button>
+          <button class="swatch" style="background:#ff8200" data-accent="#ff8200" data-accent-rgb="255 130 0" aria-pressed="true" aria-label="Tangerine"></button>
+          <button class="swatch" style="background:#e0568c" data-accent="#e0568c" data-accent-rgb="224 86 140" aria-pressed="false" aria-label="Hot magenta"></button>
+          <button class="swatch" style="background:#9c3a4a" data-accent="#9c3a4a" data-accent-rgb="156 58 74" aria-pressed="false" aria-label="Garnet"></button>
+          <button class="swatch" style="background:#804200" data-accent="#804200" data-accent-rgb="128 66 0" aria-pressed="false" aria-label="Burnt Orange"></button>
+        </div>
+      </div>
+      <div class="control-row">
+        <!-- Recolors the actual content text (Song Title/Artist, Tuning/
+             Year/Path/Score values, Song Time, custom text) — --text-color,
+             separate from Accent Color (--accent, which stays on the
+             small-caps header captions and Score's prominent percentage
+             figure) and from Element Color/Transparency above (the
+             background chip, not the text drawn on top of it). See
+             --text-color's own :root comment for exactly which CSS rules
+             read it. -->
+        <label for="textColorPicker">Text Color:</label>
+        <input type="color" class="color-input" id="textColorPicker" value="#f3e9d8" aria-label="Element text color" />
+      </div>
+      <div class="control-row">
+        <label for="fontPicker">Element Font:</label>
+        <div class="font-picker-row">
+          <button class="load-fonts-btn" id="loadSystemFonts" type="button">Load System Fonts</button>
+          <div class="arrowed-select-wrap">
+            <select id="fontPicker" class="arrowed-select"></select>
+          </div>
+        </div>
+      </div>
+      <p class="font-picker-note" id="fontPickerNote"></p>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="boldText">Bold Text:</label>
+          <input type="checkbox" id="boldText" class="vs-checkbox" />
+        </div>
+        <div class="feature-row-sliders"></div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-section">
+    <p class="settings-section-title">Marquee Effects:</p>
+    <div class="settings-section-rows">
+      <!-- The rest of this section only does anything while Marquee
+           Scroll itself is on — flair for that effect, not independent
+           settings. Rows are plain alphabetical by label (Bulb, Bulb
+           Flicker, Bulb Flicker Random, Bulb Scroll, Edge Fade, Text
+           Scroll, Stars) — see CUSTOMIZE_SECTION_ORDER's isGroup branch in
+           the script for the identical sort on the Customize tab — except
+           Text Scroll/Stars, manually pinned in that order (Text Scroll
+           first) rather than the alphabetical "Stars" before "Text
+           Scroll". Text Scroll sits directly above Stars (its
+           .marquee-scroll-row — see that class's own CSS comment) so the
+           pair reads as grouped. -->
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeBulbMode">Bulb:</label>
+          <div class="arrowed-select-wrap">
+            <select id="marqueeBulbMode" class="marquee-bulb-mode-select arrowed-select" aria-label="Which areas show the scrolling marquee light bulb ring">
+              <option value="off">Off</option>
+              <option value="all">All (Elements + Layout)</option>
+              <option value="elements">Elements Only</option>
+              <option value="layout">Layout Only</option>
+            </select>
+          </div>
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeBulbSize">Bulb Size:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbSize" min="1.5" max="55" step="0.5" value="1.5" aria-label="Diameter of the scrolling marquee light bulbs" data-min-label="Small" data-max-label="Large" />
+            </div>
+          </div>
+          <div class="feature-row-slider">
+            <label for="marqueeBulbGap">Bulb Gap:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbGap" min="5" max="60" step="1" value="5" aria-label="Gap between one bulb and the next, in pixels, independent of Bulb Size" data-min-label="Small" data-max-label="Large" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeBulbFlicker">Bulb Flicker:</label>
+          <input type="checkbox" id="marqueeBulbFlicker" class="vs-checkbox" aria-label="Flicker the marquee light bulbs like an old theater sign" />
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeBulbFlickerIntensity">Bulb Flicker Intensity:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0" aria-label="How deep the marquee bulb flicker dips" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeBulbFlickerRandom">Bulb Flicker Random:</label>
+          <input type="checkbox" id="marqueeBulbFlickerRandom" class="vs-checkbox" aria-label="Flicker every element's bulbs on its own random timing instead of all in sync; turning this off resyncs everyone to the same shared timing" />
+        </div>
+        <div class="feature-row-sliders"></div>
+      </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeBulbScroll">Bulb Scroll:</label>
+          <input type="checkbox" id="marqueeBulbScroll" class="vs-checkbox" aria-label="Scroll the marquee light bulbs; turn off to leave them static in place" />
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeBulbSpeedElements">Bulb Speed (Elements):</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbSpeedElements" min="10" max="300" step="10" value="10" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
+            </div>
+          </div>
+          <div class="feature-row-slider">
+            <label for="marqueeBulbSpeedLayout">Bulb Speed (Layout):</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbSpeedLayout" min="10" max="300" step="10" value="10" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeEdgeFade">Edge Fade:</label>
+          <input type="checkbox" id="marqueeEdgeFade" class="vs-checkbox" checked aria-label="Fade scrolling text at the left/right edges instead of a hard clip" />
+        </div>
+        <div class="feature-row-sliders"></div>
+      </div>
+      <div class="control-row feature-row marquee-scroll-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeScroll">Text Scroll:</label>
+          <input type="checkbox" id="marqueeScroll" class="vs-checkbox" aria-label="Continuously scroll Song Title/Artist, Tuning, Path, and Year like a marquee sign" />
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeScrollSpeed">Scroll Speed:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeScrollSpeed" min="10" max="300" step="10" value="10" aria-label="Marquee scroll speed for Song Title/Artist, Tuning, Path, and Year, in pixels per second" data-min-label="Slow" data-max-label="Fast" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeSparkle">Stars:</label>
+          <input type="checkbox" id="marqueeSparkle" class="vs-checkbox" aria-label="Show a small twinkling cluster of stars in the gap between repeated scrolling text" />
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeSparkleSize">Star Size:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeSparkleSize" min="4" max="64" step="1" value="4" aria-label="Size of the twinkling stars, in pixels — the same size on every element regardless of its own font size" data-min-label="Small" data-max-label="Large" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2900,6 +3011,7 @@
   // ============================================================
   const stage = document.getElementById('stage');
   const editModeInput = document.getElementById('editMode');
+  const outlinesToggleInput = document.getElementById('outlinesToggle');
   const root = document.documentElement;
   const fontPicker = document.getElementById('fontPicker');
   const fontPickerNote = document.getElementById('fontPickerNote');
@@ -2919,33 +3031,34 @@
     chipColor: '#000000',
     chipRgb: '0 0 0',
     chipAlpha: 0,
-    borderWidth: 1,
+    borderWidth: 1.2,
     bold: false,
     font: 'Arial Black',
+    textColor: '#f3e9d8',
     stageWidth: 520,
     stageHeight: 200,
     canvasBgColor: '#000000',
     canvasBgRgb: '0 0 0',
-    canvasBgAlpha: 0,
+    canvasBgAlpha: 1,
     elementHeadSize: 10,
     edgeRounding: 0,
     confettiEnabled: true,
     confettiDuration: 7,
-    confettiVolume: 0.1,
+    confettiVolume: 0.5,
     confettiTriggerAt: 100,
     marqueeScroll: false,
-    marqueeScrollSpeed: 80,
-    marqueeEdgeFade: false,
+    marqueeScrollSpeed: 10,
+    marqueeEdgeFade: true,
     marqueeSparkle: false,
-    marqueeSparkleSize: 10,
+    marqueeSparkleSize: 4,
     marqueeBulbMode: 'off',
-    marqueeBulbSize: 2.8,
-    marqueeBulbGap: 11,
-    marqueeBulbSpeedElements: 80,
-    marqueeBulbSpeedLayout: 80,
-    marqueeBulbScroll: true,
+    marqueeBulbSize: 1.5,
+    marqueeBulbGap: 5,
+    marqueeBulbSpeedElements: 10,
+    marqueeBulbSpeedLayout: 10,
+    marqueeBulbScroll: false,
     marqueeBulbFlicker: false,
-    marqueeBulbFlickerIntensity: 0.6,
+    marqueeBulbFlickerIntensity: 0,
     marqueeBulbFlickerRandom: false,
     // Seconds the whole overlay takes to fade to/from invisible on
     // playback start/stop — see render.html's fade handling. Standard's
@@ -2977,30 +3090,96 @@
   // or a value to edit. Reset restores these exact defaults (see
   // defaultVisuals below for the rest of what Reset restores).
   const defaultLayout = {
-    nowplaying: { x: 43.13099787785457, y: 0,
-                  width: 101.0521240234375, height: 20,
-      fontSize: 16, visible: true, name: 'Now Playing' },
+    nowplaying: { x: 40, y: 0,
+                  width: 139.7265625, height: 20,
+      fontSize: 16, visible: true, name: 'Now Playing',
+      useCustomStyles: false,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', bold: false, font: 'Arial Black',
+        borderWidth: 0, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      } },
     tuning:
-     { x: 33.46253908597506, y: 29.703125000000004, width: 78.46353149414062, height: 45.00000762939453, fontSize: 16, visible: true, name: 'Tuning' },
+     { x: 33.46153846153846, y: 29.5013033747673, width: 78.46353149414062, height: 45.00000762939453, fontSize: 16, visible: true, name: 'Tuning',
+       useCustomStyles: false,
+       styleOverrides: {
+         chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', bold: false, font: 'Arial Black',
+         borderWidth: 0, edgeRounding: 0, elementHeadSize: 10,
+         marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+         marqueeSparkle: false, marqueeSparkleSize: 4,
+         marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+         marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+         marqueeBulbFlickerRandom: false,
+         accentRgb: '255 130 0', chipRgb: '0 0 0',
+       } },
     year:
-       { x: 48.55143326979417, y: 29.700519561767578, width: 47.833343505859375, height: 45, fontSize: 16, visible: true, name: 'Year' },
+       { x: 48.55068280146672, y: 29.5013033747673, width: 47.833343505859375, height: 45, fontSize: 16, visible: true, name: 'Year',
+         useCustomStyles: false,
+         styleOverrides: {
+           chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', bold: false, font: 'Arial Black',
+           borderWidth: 0, edgeRounding: 0, elementHeadSize: 10,
+           marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+           marqueeSparkle: false, marqueeSparkleSize: 4,
+           marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+           marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+           marqueeBulbFlickerRandom: false,
+           accentRgb: '255 130 0', chipRgb: '0 0 0',
+         } },
     path:
-       { x: 57.74989788348858, y: 29.700523376464844, width: 76.41535949707031, height: 45, fontSize: 16, visible: true, name: 'Path' },
+       { x: 57.74939977205717, y: 29.5013033747673, width: 76.41535949707031, height: 45, fontSize: 16, visible: true, name: 'Path',
+         useCustomStyles: false,
+         styleOverrides: {
+           chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', bold: false, font: 'Arial Black',
+           borderWidth: 0, edgeRounding: 0, elementHeadSize: 10,
+           marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+           marqueeSparkle: false, marqueeSparkleSize: 4,
+           marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+           marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+           marqueeBulbFlickerRandom: false,
+           accentRgb: '255 130 0', chipRgb: '0 0 0',
+         } },
     score:
       { x: 72.44491577148438, y: 0,
-                  width: 143.2864227294922, height: 104.40625, fontSize: 20, visible: true, name: 'Score' },
+                  width: 143.2864227294922, height: 104.40625, fontSize: 20, visible: true, name: 'Score',
+        useCustomStyles: true,
+        styleOverrides: {
+          chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', bold: false, font: 'Arial Black',
+          borderWidth: 1.2, edgeRounding: 0, elementHeadSize: 10,
+          marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+          marqueeSparkle: false, marqueeSparkleSize: 4,
+          marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+          marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+          marqueeBulbFlickerRandom: false,
+          accentRgb: '255 130 0', chipRgb: '0 0 0',
+        } },
     info:
-       { x: 33.46153846153846, y: 51.70312500000001,
-  width: 345.98960876464844, height: 70.59375, fontSize: 20, visible: true, name: 'Song Title & Artist' },
+       { x: 33.46153919513409, y: 52.00130081176758,
+  width: 346, height: 70, fontSize: 20, visible: true, name: 'Song Title & Artist' },
     progress:
    { x: 0,
                  y: 87,
                  width: 519.9947967529297, height: 26,
-      fontSize: 20, visible: true, name: 'Song Time' },
+      fontSize: 20, visible: true, name: 'Song Time',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', bold: false, font: 'Arial Black',
+        borderWidth: 1.2, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      } },
     art:
         { x: 0,
                  y: 0,
-                 scale: 2.07142855844609, visible: true, name: 'Album Art' },
+                 scale: 2.0714286194698923, visible: true, name: 'Album Art' },
   };
   let layout = JSON.parse(JSON.stringify(defaultLayout));
   // Stacking order, front to back — index 0 renders on top of everything,
@@ -3073,38 +3252,57 @@
   const OVERRIDABLE_SETTINGS = [
     { key: 'chipColor', label: 'Element Color/Transparency', type: 'coloralpha', alphaKey: 'chipAlpha', section: 'Color & Type' },
     { key: 'accent', label: 'Accent Color', type: 'color', section: 'Color & Type' },
+    { key: 'textColor', label: 'Text Color', type: 'color', section: 'Color & Type' },
     { key: 'bold', label: 'Bold Text', type: 'checkbox', section: 'Color & Type', dependents: [] },
     { key: 'font', label: 'Element Font', type: 'font', section: 'Color & Type' },
-    { key: 'borderWidth', label: 'Border Thickness', type: 'range', min: 0, max: 6, step: 1, section: 'Layout & Canvas', minLabel: 'None', maxLabel: 'Thick' },
+    { key: 'borderWidth', label: 'Border Thickness', type: 'range', min: 0, max: 6, step: 0.3, section: 'Layout & Canvas', minLabel: 'None', maxLabel: 'Thick' },
     { key: 'edgeRounding', label: 'Edge Rounding', type: 'range', min: 0, max: 20, step: 1, section: 'Layout & Canvas', minLabel: 'None', maxLabel: 'Rounded' },
     { key: 'elementHeadSize', label: 'Element Header Text Size', type: 'range', min: 6, max: 160, step: 1, section: 'Layout & Canvas', minLabel: 'Small', maxLabel: 'Large' },
-    { key: 'marqueeScroll', label: 'Marquee Text Scroll', type: 'checkbox', section: 'Marquee Text Scroll', dependents: ['marqueeScrollSpeed'], mainToggle: true },
-    { key: 'marqueeScrollSpeed', label: 'Marquee Scroll Speed', type: 'range', min: 10, max: 300, step: 10, section: 'Marquee Text Scroll', minLabel: 'Slow', maxLabel: 'Fast' },
-    { key: 'marqueeEdgeFade', label: 'Marquee Edge Fade', type: 'checkbox', section: 'Marquee Text Scroll', dependents: [] },
-    { key: 'marqueeSparkle', label: 'Marquee Stars', type: 'checkbox', section: 'Marquee Text Scroll', dependents: ['marqueeSparkleSize'] },
-    { key: 'marqueeSparkleSize', label: 'Marquee Star Size', type: 'range', min: 4, max: 64, step: 1, section: 'Marquee Text Scroll', minLabel: 'Small', maxLabel: 'Large' },
-    { key: 'marqueeBulbs', label: 'Marquee Bulbs', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSize', 'marqueeBulbGap'], mainToggle: true },
-    { key: 'marqueeBulbSize', label: 'Marquee Bulb Size', type: 'range', min: 1.5, max: 55, step: 0.5, section: 'Marquee Bulbs', minLabel: 'Small', maxLabel: 'Large' },
-    { key: 'marqueeBulbGap', label: 'Marquee Bulb Gap', type: 'range', min: 5, max: 60, step: 1, section: 'Marquee Bulbs', minLabel: 'Small', maxLabel: 'Large' },
-    { key: 'marqueeBulbSpeedElements', label: 'Marquee Bulb Speed', type: 'range', min: 10, max: 300, step: 10, section: 'Marquee Bulbs', minLabel: 'Slow', maxLabel: 'Fast' },
-    { key: 'marqueeBulbScroll', label: 'Marquee Bulb Scroll', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSpeedElements'] },
-    { key: 'marqueeBulbFlicker', label: 'Marquee Bulb Flicker', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbFlickerIntensity'] },
-    { key: 'marqueeBulbFlickerIntensity', label: 'Marquee Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05, section: 'Marquee Bulbs' },
-    { key: 'marqueeBulbFlickerRandom', label: 'Marquee Bulb Flicker Random', type: 'checkbox', section: 'Marquee Bulbs', dependents: [] },
+    { key: 'marqueeScroll', label: 'Text Scroll', type: 'checkbox', section: 'Marquee Text Scroll', dependents: ['marqueeScrollSpeed'], mainToggle: true },
+    { key: 'marqueeScrollSpeed', label: 'Scroll Speed', type: 'range', min: 10, max: 300, step: 10, section: 'Marquee Text Scroll', minLabel: 'Slow', maxLabel: 'Fast' },
+    { key: 'marqueeEdgeFade', label: 'Edge Fade', type: 'checkbox', section: 'Marquee Text Scroll', dependents: [] },
+    { key: 'marqueeSparkle', label: 'Stars', type: 'checkbox', section: 'Marquee Text Scroll', dependents: ['marqueeSparkleSize'] },
+    { key: 'marqueeSparkleSize', label: 'Star Size', type: 'range', min: 4, max: 64, step: 1, section: 'Marquee Text Scroll', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeBulbs', label: 'Bulb', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSize', 'marqueeBulbGap'], mainToggle: true },
+    { key: 'marqueeBulbSize', label: 'Bulb Size', type: 'range', min: 1.5, max: 55, step: 0.5, section: 'Marquee Bulbs', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeBulbGap', label: 'Bulb Gap', type: 'range', min: 5, max: 60, step: 1, section: 'Marquee Bulbs', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeBulbSpeedElements', label: 'Bulb Speed', type: 'range', min: 10, max: 300, step: 10, section: 'Marquee Bulbs', minLabel: 'Slow', maxLabel: 'Fast' },
+    { key: 'marqueeBulbScroll', label: 'Bulb Scroll', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSpeedElements'] },
+    { key: 'marqueeBulbFlicker', label: 'Bulb Flicker', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbFlickerIntensity'] },
+    { key: 'marqueeBulbFlickerIntensity', label: 'Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05, section: 'Marquee Bulbs' },
+    { key: 'marqueeBulbFlickerRandom', label: 'Bulb Flicker Random', type: 'checkbox', section: 'Marquee Bulbs', dependents: [] },
   ];
   // Display order for the Customize tab's sections — deliberately listed
   // here rather than inferred from OVERRIDABLE_SETTINGS' own array order
   // (which is Color & Type first) so it can match the Global tab's actual
   // on-screen section order (Layout & Canvas first) regardless of the
   // array's own order.
-  const CUSTOMIZE_SECTION_ORDER = ['Layout & Canvas', 'Color & Type', 'Marquee Text Scroll', 'Marquee Bulbs'];
+  // An entry can be a plain section name, or a { group, title } object
+  // grouping several section names under ONE grey settings-section card
+  // with ONE shared header — Marquee Text Scroll + Marquee Bulbs are
+  // grouped this way now (see renderCustomizeSettingRows, and the
+  // identical merge in the Global tab's own static HTML) so every Marquee
+  // control reads as one card under one "Marquee Effects:" header instead
+  // of two separate cards. Keeping them as distinct `section` values in
+  // OVERRIDABLE_SETTINGS itself (rather than merging into one literal
+  // section name) avoids two mainToggle:true rows — marqueeScroll and
+  // marqueeBulbs — ending up in the same sortByMainThenAlpha sort, which
+  // only ever assumes one mainToggle per section. The group's title is
+  // always shown (unlike a plain entry's, which NO_SECTION_TITLE can
+  // suppress) — with "Marquee" dropped from every individual label now,
+  // the card needs its own header to say what it's a card OF.
+  const CUSTOMIZE_SECTION_ORDER = ['Layout & Canvas', 'Color & Type', { group: ['Marquee Text Scroll', 'Marquee Bulbs'], title: 'Marquee Effects' }];
   // Sections whose own .settings-section-title is skipped because the
   // first row's checkbox label already repeats the exact same text — see
   // renderCustomizeSettingRows' own comment at the call site. (Confetti
   // has the same duplicate-name situation on the Global tab but isn't
   // per-element overridable, so it has no Customize-tab counterpart to
-  // list here.)
-  const NO_SECTION_TITLE = new Set(['Marquee Text Scroll', 'Marquee Bulbs']);
+  // list here.) Marquee Text Scroll/Marquee Bulbs used to be listed here
+  // too, back when each had its own untitled card; now they're one grouped
+  // card with its own always-shown "Marquee Effects:" title instead (see
+  // CUSTOMIZE_SECTION_ORDER), so they no longer go through this
+  // per-member suppression at all.
+  const NO_SECTION_TITLE = new Set();
   // What a key falls back to when this element ISN'T customized (or
   // customized but that particular key was added to OVERRIDABLE_SETTINGS
   // after this element last had customization enabled) — global, except
@@ -3172,6 +3370,11 @@
     } else {
       el.style.removeProperty('--accent');
       el.style.removeProperty('--accent-rgb');
+    }
+    if ('textColor' in ov) {
+      el.style.setProperty('--text-color', ov.textColor);
+    } else {
+      el.style.removeProperty('--text-color');
     }
     if ('borderWidth' in ov) {
       el.style.setProperty('--border-width', ov.borderWidth + 'px');
@@ -3259,6 +3462,13 @@
     // resyncElementBulbDelay's own comment on why every other override
     // deliberately does NOT perturb an already-running element's phase.
     if (key === 'marqueeBulbFlickerRandom') resyncElementBulbDelay(id);
+    // Marquee Stars' row (disabled/dimmed/flash-wired) is computed fresh
+    // off THIS element's effective marqueeScroll every render — see
+    // renderCustomizeFeatureRow's own comment — so flipping Marquee Scroll
+    // here needs a full rebuild to pick that up live, same as the Global
+    // tab's own marqueeScroll handler calling updateMarqueeSparkleLockState
+    // immediately rather than waiting for the next unrelated re-render.
+    if (key === 'marqueeScroll') renderCustomizeSettingRows();
   }
   // The Customize tab's own "Reset to Global" button — a hard clear:
   // turns customization off AND discards every stored value for this
@@ -4176,7 +4386,7 @@
     rebuildCustomTextList();
     rebuildRollList();
   }
-  let editMode = true;
+  let editMode = false;
   let dragging = null;
   let dragOffset = { x: 0, y: 0 };
   let resizing = null;
@@ -4752,6 +4962,12 @@
       visuals.marqueeSparkle = v.marqueeSparkle;
       document.getElementById('marqueeSparkle').checked = v.marqueeSparkle;
     }
+    // Re-sync the lock AFTER both of the above — an imported/preset
+    // marqueeScroll:false + marqueeSparkle:true (an inconsistent
+    // combination that shouldn't be able to happen going forward, but old
+    // exports could predate this restriction) gets corrected back to
+    // Sparkle off, not left checked-but-disabled.
+    updateMarqueeSparkleLockState(visuals.marqueeScroll);
     // Field is still named marqueeSparkleSize (not marqueeStarSize) —
     // this is what's persisted in saved layout files, and renaming it
     // would silently drop the setting for anyone with an existing save;
@@ -4853,6 +5069,11 @@
       root.style.setProperty('--canvas-bg-alpha', String(visuals.canvasBgAlpha));
       document.getElementById('canvasBgOpacity').value = visuals.canvasBgAlpha;
     }
+    if (typeof v.textColor === 'string' && HEX_COLOR_RE.test(v.textColor)) {
+      visuals.textColor = v.textColor;
+      root.style.setProperty('--text-color', v.textColor);
+      document.getElementById('textColorPicker').value = v.textColor;
+    }
     if (typeof v.font === 'string') {
       const font = sanitizeString(v.font, '', MAX_FONT_NAME_LENGTH);
       if (font) {
@@ -4899,10 +5120,16 @@
     if (track.children.length > 0) track.textContent = text;
     return text;
   }
-  function setupBounceTicker(ticker, track) {
+  function setupBounceTicker(ticker, track, eff) {
     resetTrackToPlainText(track);
     ticker.classList.remove('marquee-scroll-active');
-    ticker.classList.remove('marquee-edge-fade-active');
+    // Edge Fade no longer implies Marquee Scroll — see render.html's own
+    // setupBounceTicker comment (mirrored here). eff is optional; when
+    // omitted this just leaves the fade off, same as before.
+    ticker.classList.toggle('marquee-edge-fade-active', !!(eff && eff.marqueeEdgeFade));
+    // Marquee Stars stays Marquee-Scroll-only — see
+    // updateMarqueeSparkleLockState, which greys out/force-unchecks its
+    // checkbox whenever Marquee Scroll is off.
     ticker.classList.remove('marquee-stars-active');
     ticker.classList.remove('marquee-bulbs-active');
     track.style.removeProperty('--marquee-unit');
@@ -5121,7 +5348,7 @@
     if (eff.marqueeScroll) {
       setupMarqueeScrollTicker(ticker, track, eff);
     } else {
-      setupBounceTicker(ticker, track);
+      setupBounceTicker(ticker, track, eff);
     }
   }
   // Marquee Scroll only: collapses Song Title & Artist to one line —
@@ -5697,7 +5924,7 @@
           setupLinkScrollTicker(ticker, track, segments, eff);
         } else {
           track.textContent = combinedText;
-          setupBounceTicker(ticker, track);
+          setupBounceTicker(ticker, track, eff);
         }
       }
     });
@@ -6579,7 +6806,15 @@
       input.type = 'checkbox';
       input.className = 'vs-checkbox';
       input.checked = !!eff[key];
-      input.disabled = !useCustom;
+      // Marquee Stars only ever renders while Marquee Scroll is on (see
+      // updateMarqueeSparkleLockState's own comment on the Global tab,
+      // mirrored here) — additionally disabled when THIS element's own
+      // effective marqueeScroll (its override, or the global fallback) is
+      // off, not just when the whole per-element override block
+      // (useCustom) is off. See renderCustomizeFeatureRow for the
+      // matching dim/flash wiring.
+      const marqueeStarsGated = key === 'marqueeSparkle' && !eff.marqueeScroll;
+      input.disabled = !useCustom || marqueeStarsGated;
       input.addEventListener('change', () => {
         if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, input.checked);
       });
@@ -6658,13 +6893,40 @@
   // own `dependents` key list.
   function renderCustomizeFeatureRow(id, setting, dependentSettings, useCustom) {
     const row = document.createElement('div');
-    row.className = 'control-row customize-setting-row feature-row' + (useCustom ? '' : ' is-disabled');
+    // marquee-scroll-row removes the row-divider line below it (see that
+    // class's own CSS comment) — Scroll and Stars read as one grouped
+    // pair here too, same as the Global tab.
+    row.className = 'control-row customize-setting-row feature-row'
+      + (useCustom ? '' : ' is-disabled')
+      + (setting.key === 'marqueeScroll' ? ' marquee-scroll-row' : '');
     const toggle = document.createElement('div');
     toggle.className = 'feature-row-toggle';
     const toggleLabel = document.createElement('label');
     toggleLabel.textContent = setting.label + ':';
     toggleLabel.htmlFor = 'customize-' + setting.key;
     toggle.append(toggleLabel, buildCustomizeControl(id, setting, useCustom));
+    // Marquee Stars' row-level dim/flash — the checkbox's own .disabled is
+    // set in buildCustomizeControl; this adds the label dimming (same
+    // .toggle-disabled CSS the Global tab uses) and a click-to-flash of
+    // Text Scroll's row, mirroring
+    // updateMarqueeSparkleLockState/flashMarqueeScrollToggle. Triggered
+    // when THIS row is marqueeSparkle: Text Scroll is pinned directly
+    // before Stars (see the pooled sort's manual exception above), so
+    // #customize-marqueeScroll already exists in the DOM by the time
+    // Stars' row is being built. Only applies while useCustom is on — an
+    // inactive override row is already fully dimmed via .is-disabled
+    // above, nothing extra needed.
+    if (setting.key === 'marqueeSparkle' && useCustom && !getEffectiveVisualsFor(id).marqueeScroll) {
+      toggle.classList.add('toggle-disabled');
+      row.addEventListener('click', () => flashMarqueeScrollToggle('customize-marqueeScroll'));
+    }
+    // Cursor-hover grouping (see wireMarqueeGroupHover's own comment) —
+    // unconditional, regardless of Stars' disabled state above; the two
+    // rows read as one pair either way.
+    if (setting.key === 'marqueeSparkle') {
+      const scrollControl = document.getElementById('customize-marqueeScroll');
+      wireMarqueeGroupHover(scrollControl && scrollControl.closest('.feature-row'), row);
+    }
     const sliders = document.createElement('div');
     sliders.className = 'feature-row-sliders';
     dependentSettings.forEach((dep) => {
@@ -6707,60 +6969,105 @@
     // tab (see CUSTOMIZE_SECTION_ORDER) instead of one flat list — each
     // setting already declares which section it belongs to right in
     // OVERRIDABLE_SETTINGS, so this just buckets by that field in the
-    // Global tab's own section order.
-    CUSTOMIZE_SECTION_ORDER.forEach((sectionName) => {
-      const settingsInSection = OVERRIDABLE_SETTINGS.filter((s) => s.section === sectionName && !consumedKeys.has(s.key));
-      if (!settingsInSection.length) return;
+    // Global tab's own section order. An entry can itself be a
+    // { group, title } object grouping several section names under one
+    // card with one shared header (see CUSTOMIZE_SECTION_ORDER's own
+    // comment) — a group's members are pooled and sorted as one flat
+    // alphabetical list (see the isGroup branch below), NOT run through
+    // each member's own mainToggle-first sort the way a plain (ungrouped)
+    // section is — that per-section sort is what the non-group branch
+    // still does, unchanged, for Layout & Canvas/Color & Type. The group's
+    // title is appended once, up front, rather than per-member.
+    CUSTOMIZE_SECTION_ORDER.forEach((entry) => {
+      const isGroup = entry && typeof entry === 'object';
+      const memberSectionNames = isGroup ? entry.group : [entry];
       const section = document.createElement('div');
       section.className = 'settings-section';
-      const rows = document.createElement('div');
-      rows.className = 'settings-section-rows';
-      // Feature checkboxes with at least one slider get reordered among
-      // themselves — the section's own main toggle pinned first, the rest
-      // alphabetical by label — and stay interleaved with the plain rows
-      // at their original OVERRIDABLE_SETTINGS position (see the main
-      // loop below, which only substitutes the next SORTED with-slider
-      // feature into each with-slider slot, leaving every plain row
-      // exactly where it already was). Zero-slider checkboxes are pulled
-      // out of that interleaved sequence entirely and rendered together,
-      // sorted the same way, at the very bottom of the section — nothing
-      // to adjust means nothing worth a prominent position.
-      const sortByMainThenAlpha = (a, b) => {
-        if (a.mainToggle) return -1;
-        if (b.mainToggle) return 1;
-        return a.label.localeCompare(b.label);
-      };
-      const sortedWithSliders = settingsInSection
-        .filter((s) => s.dependents && s.dependents.length > 0)
-        .slice()
-        .sort(sortByMainThenAlpha);
-      const sortedWithoutSliders = settingsInSection
-        .filter((s) => s.dependents && s.dependents.length === 0)
-        .slice()
-        .sort(sortByMainThenAlpha);
-      let sliderFeatureCursor = 0;
-      settingsInSection.forEach((setting) => {
-        if (setting.dependents && setting.dependents.length > 0) {
-          const featureSetting = sortedWithSliders[sliderFeatureCursor++];
-          const dependentSettings = featureSetting.dependents.map((k) => byKey[k]);
-          rows.appendChild(renderCustomizeFeatureRow(id, featureSetting, dependentSettings, useCustom));
-        } else if (!setting.dependents) {
-          rows.appendChild(renderCustomizePlainRow(id, setting, useCustom));
-        }
-        // Zero-slider features are skipped here — rendered below instead.
-      });
-      sortedWithoutSliders.forEach((setting) => {
-        rows.appendChild(renderCustomizeFeatureRow(id, setting, [], useCustom));
-      });
-      // No title on sections in NO_SECTION_TITLE — see the identical
-      // exception on the Global tab's HTML for why (the first row's own
-      // checkbox label already reads as the section header).
-      if (!NO_SECTION_TITLE.has(sectionName)) {
+      if (isGroup) {
         const title = document.createElement('p');
         title.className = 'settings-section-title';
-        title.textContent = sectionName + ':';
+        title.textContent = entry.title + ':';
         section.appendChild(title);
       }
+      const rows = document.createElement('div');
+      rows.className = 'settings-section-rows';
+      let anyMemberHadSettings = false;
+      if (isGroup) {
+        // Plain alphabetical, whole group as one flat list — no
+        // mainToggle-first, no zero-slider-to-the-bottom, every member
+        // section's settings pooled together and sorted purely by label.
+        // Every Marquee setting has a `dependents` array (even if empty),
+        // so renderCustomizeFeatureRow (not renderCustomizePlainRow, which
+        // is only for settings with no `dependents` field at all) is the
+        // only branch ever needed here. One manual exception: Text Scroll
+        // is pinned directly before Stars regardless of alphabetical order
+        // (which would otherwise put Stars first) — per request, and to
+        // match the Global tab's own hand-ordered markup. Nothing else is
+        // affected since these two are adjacent either way.
+        const pooled = memberSectionNames
+          .flatMap((sectionName) => OVERRIDABLE_SETTINGS.filter((s) => s.section === sectionName && !consumedKeys.has(s.key)))
+          .sort((a, b) => {
+            if (a.key === 'marqueeScroll' && b.key === 'marqueeSparkle') return -1;
+            if (a.key === 'marqueeSparkle' && b.key === 'marqueeScroll') return 1;
+            return a.label.localeCompare(b.label);
+          });
+        anyMemberHadSettings = pooled.length > 0;
+        pooled.forEach((setting) => {
+          const dependentSettings = (setting.dependents || []).map((k) => byKey[k]);
+          rows.appendChild(renderCustomizeFeatureRow(id, setting, dependentSettings, useCustom));
+        });
+      } else {
+        memberSectionNames.forEach((sectionName) => {
+          const settingsInSection = OVERRIDABLE_SETTINGS.filter((s) => s.section === sectionName && !consumedKeys.has(s.key));
+          if (!settingsInSection.length) return;
+          anyMemberHadSettings = true;
+          // Feature checkboxes with at least one slider get reordered among
+          // themselves — the section's own main toggle pinned first, the rest
+          // alphabetical by label — and stay interleaved with the plain rows
+          // at their original OVERRIDABLE_SETTINGS position (see the main
+          // loop below, which only substitutes the next SORTED with-slider
+          // feature into each with-slider slot, leaving every plain row
+          // exactly where it already was). Zero-slider checkboxes are pulled
+          // out of that interleaved sequence entirely and rendered together,
+          // sorted the same way, at the very bottom of the section — nothing
+          // to adjust means nothing worth a prominent position.
+          const sortByMainThenAlpha = (a, b) => {
+            if (a.mainToggle) return -1;
+            if (b.mainToggle) return 1;
+            return a.label.localeCompare(b.label);
+          };
+          const sortedWithSliders = settingsInSection
+            .filter((s) => s.dependents && s.dependents.length > 0)
+            .slice()
+            .sort(sortByMainThenAlpha);
+          const sortedWithoutSliders = settingsInSection
+            .filter((s) => s.dependents && s.dependents.length === 0)
+            .slice()
+            .sort(sortByMainThenAlpha);
+          let sliderFeatureCursor = 0;
+          settingsInSection.forEach((setting) => {
+            if (setting.dependents && setting.dependents.length > 0) {
+              const featureSetting = sortedWithSliders[sliderFeatureCursor++];
+              const dependentSettings = featureSetting.dependents.map((k) => byKey[k]);
+              rows.appendChild(renderCustomizeFeatureRow(id, featureSetting, dependentSettings, useCustom));
+            } else if (!setting.dependents) {
+              rows.appendChild(renderCustomizePlainRow(id, setting, useCustom));
+            }
+            // Zero-slider features are skipped here — rendered below instead.
+          });
+          sortedWithoutSliders.forEach((setting) => {
+            rows.appendChild(renderCustomizeFeatureRow(id, setting, [], useCustom));
+          });
+          // A plain (non-group) entry's own title, unless suppressed.
+          if (!NO_SECTION_TITLE.has(sectionName)) {
+            const title = document.createElement('p');
+            title.className = 'settings-section-title';
+            title.textContent = sectionName + ':';
+            section.appendChild(title);
+          }
+        });
+      }
+      if (!anyMemberHadSettings) return;
       section.appendChild(rows);
       container.appendChild(section);
     });
@@ -7040,6 +7347,64 @@
     void toggle.offsetWidth;
     toggle.classList.add('lock-flash');
   }
+  // Same idea, for Marquee Text Scroll — the visible answer to "why didn't
+  // my click do anything" when clicking a disabled Marquee Stars row while
+  // Scroll is off. Flashes only Scroll's own row (not Stars' — that one's
+  // already visibly dimmed/disabled, so it doesn't need its own flash too).
+  // Takes an element id rather than being hardcoded to the Global tab's own
+  // #marqueeScroll, so the Customize tab's row click handler (below) can
+  // reuse it with its own #customize-marqueeScroll id.
+  function flashMarqueeScrollToggle(scrollControlId) {
+    const control = document.getElementById(scrollControlId);
+    const row = control && control.closest('.feature-row');
+    if (!row) return;
+    row.classList.remove('lock-flash');
+    void row.offsetWidth;
+    row.classList.add('lock-flash');
+  }
+  // The plain cursor-hover highlight (.group-hover, see its own CSS
+  // comment) — just the everyday "you're pointed at this row" background/
+  // border tint every .control-row gets on real :hover, applied to BOTH
+  // rows whenever the cursor is over EITHER one, so hovering either half
+  // of the pair highlights the whole pair. Wired on both rows both ways
+  // (each row's own mouseenter/mouseleave toggles the class on both) so
+  // it works regardless of which one the cursor actually entered.
+  function wireMarqueeGroupHover(rowA, rowB) {
+    if (!rowA || !rowB) return;
+    const enter = () => { rowA.classList.add('group-hover'); rowB.classList.add('group-hover'); };
+    const leave = () => { rowA.classList.remove('group-hover'); rowB.classList.remove('group-hover'); };
+    [rowA, rowB].forEach((row) => {
+      row.addEventListener('mouseenter', enter);
+      row.addEventListener('mouseleave', leave);
+    });
+  }
+  // Element Outlines only makes sense while the layout is unlocked (there's
+  // nothing to see the outline of an element you can't drag/resize) — so
+  // Lock Layout disables its checkbox and dims the whole pill rather than
+  // letting it sit there doing nothing. Called from the editModeInput
+  // 'change' handler and once at startup to match the lock's own default.
+  function updateOutlinesLockState(locked) {
+    outlinesToggleInput.disabled = locked;
+    outlinesToggleInput.closest('.edit-toggle').classList.toggle('toggle-disabled', locked);
+  }
+  // Marquee Stars only ever renders while Marquee Scroll is on (see
+  // setupBounceTicker/runMarqueeScrollTicker — the star cluster is a
+  // ::after on .marquee-copy, which bounce/static mode never creates) — so
+  // it's disabled and dimmed, and force-unchecked, whenever Scroll is off,
+  // rather than letting it sit there doing nothing. Called from the
+  // marqueeScroll 'change' handler, from applyImportedVisuals (import/preset
+  // switch can set marqueeScroll and marqueeSparkle inconsistently), and
+  // once at startup to match Scroll's own default.
+  function updateMarqueeSparkleLockState(scrollOn) {
+    const input = document.getElementById('marqueeSparkle');
+    input.disabled = !scrollOn;
+    input.closest('.feature-row-toggle').classList.toggle('toggle-disabled', !scrollOn);
+    if (!scrollOn && input.checked) {
+      input.checked = false;
+      visuals.marqueeSparkle = false;
+      setupAllTickers();
+    }
+  }
   // ============================================================
   // 7. Event wiring — every addEventListener call in the file lives
   // here, in one place, in the same order as the controls appear
@@ -7049,15 +7414,40 @@
   document.querySelectorAll('.obj').forEach(wireObject);
   // Inverted from the checkbox's raw state on purpose: this is a "Lock
   // Layout" toggle now, not "Edit Layout" — checked means LOCKED, so
-  // editMode is the opposite of checked. Unchecked (default) = unlocked =
-  // editable, matching editMode's own default of true above. Label flips
-  // "Lock Layout:"/"Unlock Layout:" the same way Zoom's own label does
-  // below — describes what clicking it does next, not its current state.
+  // editMode is the opposite of checked. Checked (default) = locked, matching
+  // editMode's own default of false above and the checkbox's `checked`
+  // attribute in the markup. Label flips "Lock Layout:"/"Unlock Layout:" the
+  // same way Zoom's own label does below — describes what clicking it does
+  // next, not its current state.
   editModeInput.addEventListener('change', (e) => {
     editMode = !e.target.checked;
     stage.classList.toggle('editing', editMode);
     document.getElementById('lockLayoutLabel').textContent = e.target.checked ? 'Unlock Layout:' : 'Lock Layout:';
     document.getElementById('lockIcon').classList.toggle('unlocked', !e.target.checked);
+    updateOutlinesLockState(e.target.checked);
+  });
+  // Matches Lock Layout's own default (checked = locked) at startup, since
+  // outlinesToggleInput.disabled isn't set in the markup itself.
+  updateOutlinesLockState(editModeInput.checked);
+  // Matches Marquee Scroll's own default (unchecked) at startup, since
+  // marqueeSparkle's disabled isn't set in the markup itself.
+  updateMarqueeSparkleLockState(document.getElementById('marqueeScroll').checked);
+  // Same fix as Outlines' own click handler above: a disabled checkbox
+  // eats clicks silently, so while Marquee Stars is locked out, clicking
+  // its row flashes the Marquee Text Scroll row instead of doing nothing.
+  document.getElementById('marqueeSparkle').closest('.feature-row').addEventListener('click', () => {
+    if (document.getElementById('marqueeSparkle').disabled) flashMarqueeScrollToggle('marqueeScroll');
+  });
+  wireMarqueeGroupHover(
+    document.getElementById('marqueeScroll').closest('.feature-row'),
+    document.getElementById('marqueeSparkle').closest('.feature-row')
+  );
+  // A disabled checkbox eats clicks silently — no 'change' event, nothing
+  // for the user to see. Same fix as the stage's own pointerdown handler
+  // below: while Outlines is locked out, clicking its pill flashes the
+  // Lock Layout pill instead, pointing at why it isn't responding.
+  outlinesToggleInput.closest('.edit-toggle').addEventListener('click', () => {
+    if (outlinesToggleInput.disabled) flashLockToggle();
   });
   // Clicking anywhere on the stage while locked (background, or an
   // object/handle — their own pointerdown handlers bail out on
@@ -7079,10 +7469,11 @@
   });
   // Element Outlines toggle — see the outlinesVisible comment above. Same
   // switch treatment as Zoom — checked = outlines visible (default on).
-  document.getElementById('outlinesToggle').addEventListener('change', (e) => {
+  outlinesToggleInput.addEventListener('change', (e) => {
     outlinesVisible = e.target.checked;
     document.body.classList.toggle('hide-outlines', !outlinesVisible);
     document.getElementById('outlinesLabel').textContent = outlinesVisible ? 'Outlines: On' : 'Outlines: Off';
+    document.getElementById('outlineIcon').classList.toggle('icon-hidden', !outlinesVisible);
   });
   document.getElementById('resetBtn').addEventListener('click', () => {
     // Which of PRESETS to restore — picked by #presetSelect, not
@@ -7211,7 +7602,12 @@
     const min = parseFloat(input.min), max = parseFloat(input.max), val = parseFloat(input.value);
     const pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
     input.style.setProperty('--fill', pct + '%');
-    if (input._vsValueEl) input._vsValueEl.textContent = String(val);
+    // Shown as % of the slider's own range rather than the raw value — a
+    // player has no context for what "80" or "2.8" mean (px/sec, px
+    // diameter, ...), but "42%" reads the same way on every slider
+    // regardless of its underlying unit. Rounded since e.g. Marquee Bulb
+    // Size's 1.5–55 range almost never lands on a whole percent exactly.
+    if (input._vsValueEl) input._vsValueEl.textContent = Math.round(pct) + '%';
   }
   // Called once per slider — Global tab's at boot, Customize tab's fresh
   // ones after every renderCustomizeSettingRows() rebuild (see its own
@@ -7270,6 +7666,12 @@
   document.getElementById('canvasBgOpacity').addEventListener('input', (e) => {
     visuals.canvasBgAlpha = parseFloat(e.target.value);
     root.style.setProperty('--canvas-bg-alpha', e.target.value);
+  });
+  // Text Color — see --text-color's own :root comment for exactly which
+  // rules (.title/.stat-value/.custom-text) read this instead of --paper.
+  document.getElementById('textColorPicker').addEventListener('input', (e) => {
+    visuals.textColor = e.target.value;
+    root.style.setProperty('--text-color', e.target.value);
   });
   // Drives --border-width, which both .obj's border and the canvas ring
   // read from — the only on/off for either is this reaching 0.
@@ -7394,7 +7796,15 @@
   });
   document.getElementById('marqueeScroll').addEventListener('change', (e) => {
     visuals.marqueeScroll = e.target.checked;
+    updateMarqueeSparkleLockState(e.target.checked);
     setupAllTickers();
+    // The Customize tab's own Marquee Stars gating (renderCustomizeFeatureRow)
+    // reads THIS element's effective marqueeScroll, which falls back to the
+    // global value for any element that doesn't override it — so a global
+    // toggle can change what the currently-selected Customize element's
+    // Stars row should show, same as flipping the override itself does
+    // (see setElementOverrideValue's own matching rebuild call).
+    renderCustomizeSettingRows();
   });
   // Drives visuals.marqueeScrollSpeed — text scroll speed only now (bulb
   // ring speed moved to its own two dedicated sliders, see
@@ -7753,7 +8163,7 @@
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const accent = getComputedStyle(root).getPropertyValue('--accent').trim() || '#ff8200';
-    const COLORS = [accent, '#ffd37a', '#f3e9d8'];
+    const COLORS = [accent, '#ffd37a', '#f3e9d8', '#ff3b6b', '#3ba1ff', '#2ee87d', '#c65bff', '#ffe63b', '#ff7a1a', '#00e5ff', '#ff5cc0'];
     // Continuous emitter, not a one-shot batch: each particle gets removed
     // the instant it falls out of the bottom of frame (see the filter in
     // frame() below) — nothing lands or piles up — while new ones keep

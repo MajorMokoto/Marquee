@@ -19,6 +19,10 @@
     --bulb-hot: #ffd37a;
     --paper: #f3e9d8;
     --paper-dim: #b8a88c;
+    /* Text Color control's own var — see editor.html's identical :root
+       comment (mirrored here). Only the rendered content text
+       (.title/.stat-value/.custom-text) reads this instead of --paper. */
+    --text-color: #f3e9d8;
 
     --accent: #ff8200;
     --accent-rgb: 255 130 0;
@@ -124,9 +128,6 @@
     flex-direction: column;
     justify-content: center;
     background: rgb(var(--chip-rgb) / var(--chip-alpha));
-    border-width: var(--border-width);
-    border-style: solid;
-    border-color: rgb(var(--accent-rgb) / 0.5);
     border-radius: var(--edge-rounding);
     box-shadow: 0 10px 24px -12px rgba(0, 0, 0, calc(var(--chip-alpha) * 0.75));
     /* No backdrop-filter here, unlike the editor's own canvas copy of this
@@ -150,6 +151,33 @@
     font-family: var(--font-display);
     font-size: 16px;
   }
+  /* Border Thickness ring, as a ::after overlay instead of a real `border`
+     property — a real border paints UNDER an element's own children (its
+     text, or Album Art's <img>), so anything that touches or slightly
+     overflows the box's edge (ticker text, object-fit:cover images) visually
+     covers part of it. A ::after pseudo-element is always the LAST thing
+     painted for its box, so this ring sits on top of everything inside the
+     element, guaranteed, regardless of what that content does. inset:0
+     draws it flush with the box's own edge, same place the real border used
+     to sit, but — like the stage's own inset box-shadow ring above — takes
+     no layout space, so removing the real border doesn't change any
+     element's effective content area. pointer-events:none so it never
+     blocks clicks/drags on the element beneath it. */
+  .obj::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: var(--border-width) solid rgb(var(--accent-rgb) / 0.5);
+    border-radius: var(--edge-rounding);
+    pointer-events: none;
+  }
+  /* Album Art resizes via transform:scale() (see --art-scale's :root
+     comment above), which scales this ::after ring right along with the
+     box — at the default ~2x art scale its border rendered ~2x thicker
+     than every other element's. Dividing border-width by --art-scale here
+     cancels that out so Album Art's border reads as the same thickness as
+     everywhere else. */
+  .obj-art::after { border-width: calc(var(--border-width) / var(--art-scale, 1)); }
 
   .obj-art { width: 84px; height: 84px; padding: 1px; }
   .obj-art .art-img {
@@ -165,7 +193,7 @@
   .obj-info { width: max-content; }
   .title {
     margin: 0 0 3px; font-weight: 900;
-    font-size: 1.2em; line-height: 1.15; color: var(--paper); letter-spacing: -0.01em;
+    font-size: 1.2em; line-height: 1.15; color: var(--text-color); letter-spacing: -0.01em;
   }
   .artist { margin: 0; font-size: 0.84em; color: var(--paper-dim); font-weight: 600; }
   /* Marquee Scroll only: Song Title & Artist collapses to one line —
@@ -238,9 +266,15 @@
     from { transform: translateX(0); }
     to   { transform: translateX(calc(-1 * var(--marquee-unit, 100px))); }
   }
-  /* Marquee flair — both opt-in per their own Visual Settings toggle,
-     nested under (only meaningful with) Marquee Scroll itself; JS only
-     ever adds these two classes alongside .marquee-scroll-active. */
+  /* Marquee flair — both opt-in per their own Visual Settings toggle.
+     Marquee Stars (.marquee-stars-active, below) stays Marquee-Scroll-only
+     — JS only ever adds it alongside .marquee-scroll-active, and its own
+     checkbox is greyed out/force-unchecked whenever Scroll is off (see
+     updateMarqueeSparkleLockState in editor.html). Edge Fade doesn't have
+     that restriction: setupBounceTicker toggles this class off
+     eff.marqueeEdgeFade directly, so it also fades the plain
+     bounce-on-overflow ticker's edges when text is too long for its box,
+     not just the continuous marquee-sign crawl. */
   .ticker.marquee-edge-fade-active {
     /* Percentage-based, not fixed px, so the fade stays proportional
        whether the element is tiny or huge instead of eating a bigger
@@ -488,7 +522,7 @@
     font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 0.98em;
-    color: var(--paper);
+    color: var(--text-color);
   }
 
   .stat-value-percent {
@@ -514,12 +548,16 @@
   }
 
   .obj-progress { width: 240px; display: flex; flex-direction: row; align-items: center; gap: 8px; }
-  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; }
+  /* Horizontal padding keeps the elapsed/duration values from sitting
+     flush against .obj-progress's own edge — the box only has 1px of its
+     own padding (see .obj), not enough room before the border ring, so the
+     time text was getting visually clipped/crowded against it. */
+  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; padding: 0 6px; }
   .progress-track { flex: 1; height: 3px; background: rgba(243, 233, 216, 0.14); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--bulb-hot)); transition: width 0.2s linear; }
 
   .obj-custom { width: max-content; }
-  .custom-text { display: block; font-size: 0.9em; font-weight: 600; color: var(--paper); }
+  .custom-text { display: block; font-size: 0.9em; font-weight: 600; color: var(--text-color); }
 
   /* Same rule as the editor's own canvas — above every element's own
      z-index range, pointer-events:none so it's purely visual. Confetti
@@ -828,6 +866,11 @@
         el.style.removeProperty('--accent');
         el.style.removeProperty('--accent-rgb');
       }
+      if ('textColor' in ov) {
+        el.style.setProperty('--text-color', ov.textColor);
+      } else {
+        el.style.removeProperty('--text-color');
+      }
       if ('borderWidth' in ov) {
         el.style.setProperty('--border-width', ov.borderWidth + 'px');
       } else {
@@ -908,10 +951,19 @@
       if (track.children.length > 0) track.textContent = text;
       return text;
     }
-    function setupBounceTicker(ticker, track) {
+    function setupBounceTicker(ticker, track, eff) {
       resetTrackToPlainText(track);
       ticker.classList.remove('marquee-scroll-active');
-      ticker.classList.remove('marquee-edge-fade-active');
+      // Edge Fade no longer implies Marquee Scroll — see the
+      // .marquee-edge-fade-active CSS comment. eff is optional (Roll's own
+      // call site below doesn't have a single element's effective settings
+      // to hand); when omitted this just leaves the fade off, same as
+      // before.
+      ticker.classList.toggle('marquee-edge-fade-active', !!(eff && eff.marqueeEdgeFade));
+      // Marquee Stars stays Marquee-Scroll-only — the Global/Customize
+      // Marquee Sparkle checkbox is greyed out and force-unchecked whenever
+      // Marquee Scroll is off (see updateMarqueeSparkleLockState) instead of
+      // stars trying to also work over static/bounce text.
       ticker.classList.remove('marquee-stars-active');
       ticker.classList.remove('marquee-bulbs-active');
       track.style.removeProperty('--marquee-unit');
@@ -1114,7 +1166,7 @@
       if (eff.marqueeScroll) {
         setupMarqueeScrollTicker(ticker, track, eff);
       } else {
-        setupBounceTicker(ticker, track);
+        setupBounceTicker(ticker, track, eff);
       }
     }
     // Creates the 4 edge elements (top/right/bottom/left), each with a
@@ -1606,7 +1658,7 @@
             setupLinkScrollTicker(ticker, track, segments, eff);
           } else {
             track.textContent = combinedText;
-            setupBounceTicker(ticker, track);
+            setupBounceTicker(ticker, track, eff);
           }
         }
       });
@@ -1736,6 +1788,7 @@
 
     if (visuals.accentRgb) root.style.setProperty('--accent-rgb', visuals.accentRgb);
     if (visuals.accent) root.style.setProperty('--accent', visuals.accent);
+    if (visuals.textColor) root.style.setProperty('--text-color', visuals.textColor);
     if (visuals.chipRgb) root.style.setProperty('--chip-rgb', visuals.chipRgb);
     if (typeof visuals.chipAlpha === 'number') root.style.setProperty('--chip-alpha', String(visuals.chipAlpha));
     if (typeof visuals.borderWidth === 'number') root.style.setProperty('--border-width', visuals.borderWidth + 'px');
@@ -2002,7 +2055,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff8200';
-    const COLORS = [accent, '#ffd37a', '#f3e9d8'];
+    const COLORS = [accent, '#ffd37a', '#f3e9d8', '#ff3b6b', '#3ba1ff', '#2ee87d', '#c65bff', '#ffe63b', '#ff7a1a', '#00e5ff', '#ff5cc0'];
 
     function currentDurationMs() {
       return clamp(visuals.confettiDuration, 1, 20) * 1000;
