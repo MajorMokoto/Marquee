@@ -306,6 +306,7 @@
     font-size: 0.78rem;
     font-weight: 600;
   }
+  .preset-static-label::before,
   .preset-static-label::after {
     content: '▾';
     color: var(--vs-text-dim);
@@ -348,6 +349,44 @@
     font-family: var(--font-body);
   }
   .preset-select option { background: var(--vs-card-bg); color: #f2f2f2; }
+  /* Same pill/dark-select/double-arrow treatment as .preset-select, reused
+     for any dropdown that (unlike Presets) needs to actually show its
+     current value as real text — Element Font, Marquee Bulbs. No
+     invisible-select-plus-overlay-label trick here since there's no fixed
+     caption to substitute in; the arrows are pure decoration painted by
+     the wrapper, sitting on top of a real appearance:none select whose own
+     text is what's visible. */
+  .arrowed-select-wrap { position: relative; display: inline-flex; }
+  .arrowed-select-wrap::before,
+  .arrowed-select-wrap::after {
+    content: '▾';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--vs-text-dim);
+    font-weight: 400;
+    font-size: 1.56rem;
+    pointer-events: none;
+  }
+  .arrowed-select-wrap::before { left: 10px; }
+  .arrowed-select-wrap::after { right: 10px; }
+  .arrowed-select {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    background: var(--vs-card-bg);
+    color: #f2f2f2;
+    /* See .preset-select's own comment on color-scheme — same fix, same
+       reason (Chrome auto-darkening the native open popup otherwise). */
+    color-scheme: dark;
+    border: 1px solid var(--vs-border);
+    border-radius: 999px;
+    padding: 8px 34px;
+    font-size: 0.82rem;
+    font-family: var(--font-body);
+  }
+  .arrowed-select:hover { border-color: var(--vs-text-dim); }
+  .arrowed-select option { background: var(--vs-card-bg); color: #f2f2f2; }
   .edit-toggle {
     display: flex;
     align-items: center;
@@ -475,7 +514,21 @@
     background: var(--vs-card-bg);
   }
   .lock-icon.unlocked::before { transform: translateX(4px) rotate(25deg); }
+  /* Attention flash for the Lock Layout pill — triggered from JS
+     (flashLockToggle) when the user clicks the stage while it's locked,
+     so there's a visible answer to "why isn't this responding to my
+     click." Re-triggerable: flashLockToggle always removes+reflows+
+     re-adds this class, since a CSS animation won't restart just because
+     the class is already present (rapid repeat clicks should re-flash,
+     not silently no-op). */
+  @keyframes lock-toggle-flash {
+    0%, 100% { box-shadow: none; }
+    25%, 75% { box-shadow: 0 0 0 2px var(--vs-accent); }
+    50% { box-shadow: 0 0 0 3px var(--vs-accent); }
+  }
+  .edit-toggle.lock-flash { animation: lock-toggle-flash 0.6s ease-in-out; }
   .reset-btn {
+    position: relative;
     width: var(--toolbar-item-w);
     height: var(--toolbar-item-h);
     display: flex;
@@ -491,20 +544,49 @@
     cursor: pointer;
   }
   .reset-btn:hover { border-color: var(--vs-text-dim); }
+  /* Refresh Page's icon — a plain unicode glyph rather than a hand-drawn
+     CSS shape, same precedent as .preset-static-label's ▾ arrows (a
+     circular-arrow shape isn't worth hand-drawing in CSS the way the
+     zoom lens/padlock were). Text lives in its own #refreshPageBtnLabel
+     span, not as a sibling text node directly in the button, since the
+     click handler does refreshPageBtnLabel.textContent = 'Saving…' —
+     if the icon were a sibling of a bare text node instead, there'd be
+     nothing to safely reassign without wiping the icon out too.
+     Both .refresh-icon and .reset-icon are pinned to the button's left
+     edge via position:absolute — taken out of the flex flow entirely so
+     they don't shift the label span off-center; .reset-btn's own
+     justify-content:center only ever sees the one in-flow child (the
+     label), same as before either icon existed. left:14px matches the
+     button's own left padding, so the icon sits where the label's own
+     text used to start. */
+  .refresh-icon, .reset-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1rem;
+    line-height: 1;
+  }
+  /* Reset to Defaults' icon (styling lives in the shared
+     .refresh-icon, .reset-icon rule above) — same plain-unicode-glyph
+     approach as Refresh (a hand-drawn CSS arc+arrowhead was tried first
+     but replaced with this). Counter-clockwise winding, opposite
+     Refresh Page's clockwise ⟳, so the two adjacent buttons read as
+     distinct actions rather than duplicates. */
   .swatch:focus-visible, .load-fonts-btn:focus-visible, input:focus-visible {
-    outline: 2px solid var(--gold);
+    outline: 2px solid var(--vs-accent);
     outline-offset: 2px;
   }
   .reset-btn:focus-visible {
     outline: 2px solid var(--vs-accent);
     outline-offset: 2px;
   }
-  /* No focus/click highlight on the closed select box itself for either
-     dropdown (#fontPicker, .preset-select) — the highlight belongs on
-     whichever option is selected in the opened native list, not painted
-     around the outside of the box, and outline didn't reliably follow
-     .preset-select's pill border-radius across browsers anyway. */
-  #fontPicker:focus-visible, .preset-select:focus-visible {
+  /* No focus/click highlight on the closed select box itself for any of
+     these dropdowns — the highlight belongs on whichever option is
+     selected in the opened native list, not painted around the outside of
+     the box, and outline didn't reliably follow the pill border-radius
+     across browsers anyway. */
+  .arrowed-select:focus-visible, .preset-select:focus-visible {
     outline: none;
   }
   /* ---- the canvas — genuinely transparent, same as the real output ---- */
@@ -1436,13 +1518,13 @@
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: var(--paper-dim);
+    color: var(--vs-text-dim);
     font-size: 0.78rem;
     font-weight: 700;
     padding: 6px 4px 8px;
     cursor: pointer;
   }
-  .settings-tab:hover { color: var(--paper); }
+  .settings-tab:hover { color: #f2f2f2; }
   .settings-tab.active { color: var(--vs-accent); border-bottom-color: var(--vs-accent); }
   /* One row per OVERRIDABLE_SETTINGS entry, built in
      renderCustomizeSettingRows() — label, then the control itself.
@@ -1782,15 +1864,11 @@
      inputs, textarea, the font-size/roll-assign steppers, the toggle-row
      card) — same --vs-* token vocabulary as everything above, just filling
      in corners the original restyle didn't reach. `.panel select` is
-     deliberately never used as a bare catch-all: .marquee-bulb-mode-select
-     and #customizeElementSelect still live inside a .panel too but are out
-     of scope here, so only the narrower `.roll-assign-field select` and
-     #fontPicker (below) get their own rule. */
-  .panel #fontPicker {
-    background: var(--vs-card-bg);
-    color: #f2f2f2;
-    border-color: var(--vs-border);
-  }
+     deliberately never used as a bare catch-all: #customizeElementSelect
+     still lives inside a .panel too but is out of scope here, so only the
+     narrower `.roll-assign-field select` gets its own rule. #fontPicker
+     and #marqueeBulbMode now get their look from .arrowed-select (see
+     above) instead of a rule in this block. */
   .panel .load-fonts-btn {
     background: var(--vs-page-bg);
     border-color: var(--vs-border);
@@ -1963,28 +2041,14 @@
   .add-custom-row label { font-size: 0.85rem; color: var(--paper); font-weight: 600; flex: none; }
   .swatches { display: flex; gap: 8px; }
   .swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
-  .swatch[aria-pressed="true"] { border-color: var(--paper); }
+  .swatch[aria-pressed="true"] { border-color: var(--vs-accent); }
   input[type="range"] { width: 160px; accent-color: var(--gold); }
   .font-picker-row { display: flex; align-items: center; gap: 8px; }
-  select.marquee-bulb-mode-select {
-    background: var(--void);
-    color: var(--paper);
-    border: 1px solid rgba(243, 233, 216, 0.25);
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-size: 0.82rem;
-    font-family: var(--font-body);
-  }
-  select#fontPicker {
-    background: var(--void);
-    color: var(--paper);
-    border: 1px solid rgba(243, 233, 216, 0.25);
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-size: 0.82rem;
-    font-family: var(--font-body);
-    max-width: 200px;
-  }
+  /* .marquee-bulb-mode-select and #fontPicker's own look now comes from
+     .arrowed-select (see the shared rule near .preset-select) instead of
+     a rule here — both classes/ids stay in the markup as hooks, just
+     unstyled by this old --void/--paper block now. */
+  #fontPicker.arrowed-select { max-width: 200px; }
   .load-fonts-btn {
     background: transparent;
     border: 1px solid rgba(243, 233, 216, 0.25);
@@ -1996,7 +2060,6 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  .load-fonts-btn:hover { color: var(--paper); border-color: var(--paper-dim); }
   .font-picker-note { font-size: 0.68rem; color: var(--paper-dim); margin: -4px 0 0; }
   /* exportNote lives inline in .font-picker-row now (next to the Copy
      button) instead of on its own line below — the -4px pull-up above was
@@ -2162,7 +2225,6 @@
     line-height: 1;
     cursor: pointer;
   }
-  .fontsize-field .step-btn:hover { color: var(--paper); border-color: var(--paper-dim); }
   /* Per-element Marquee Roll assignment: a "which Roll" dropdown plus a
      "what slot in it" number, same row layout/sizing as .fontsize-field
      (reused directly for the flex/gap), just with a <select> added and
@@ -2267,7 +2329,6 @@
     margin-right: 10px;
     font-family: var(--font-body);
   }
-  .file-input::file-selector-button:hover { color: var(--paper); }
   .io-textarea {
     width: 100%;
     resize: vertical;
@@ -2300,8 +2361,7 @@
     padding: 7px 10px;
   }
   .custom-text-row .text-input { flex: 1; min-width: 0; }
-  .empty-note { font-size: 0.78rem; color: var(--paper-dim); font-style: italic; margin: 0; }
-  .load-fonts-btn.danger:hover { color: var(--paper); background: #6b2129; border-color: #6b2129; }</style><h1 class="sr-only">Welcome to the Marquee</h1><div class="hero" aria-hidden="true">
+  .empty-note { font-size: 0.78rem; color: var(--paper-dim); font-style: italic; margin: 0; }</style><h1 class="sr-only">Welcome to the Marquee</h1><div class="hero" aria-hidden="true">
   <div class="hero-bulbs">
     <span class="hero-bulb" style="animation-delay:0s"></span>
     <span class="hero-bulb" style="animation-delay:.3s"></span>
@@ -2369,8 +2429,14 @@
     <br><code id="marquee-editor-obs-url">/api/plugins/marquee/render</code>
   </p>
   <div class="toolbar-actions">
-    <button class="reset-btn" id="resetBtn">Reset to Defaults</button>
-    <button class="reset-btn" id="refreshPageBtn" type="button" title="Save the current layout, then reload this editor — try this if something looks stuck or out of sync">Refresh Page</button>
+    <button class="reset-btn" id="resetBtn">
+      <span class="reset-icon" aria-hidden="true">⟲</span>
+      <span>Reset to Defaults</span>
+    </button>
+    <button class="reset-btn" id="refreshPageBtn" type="button" title="Save the current layout, then reload this editor — try this if something looks stuck or out of sync">
+      <span class="refresh-icon" aria-hidden="true">⟳</span>
+      <span id="refreshPageBtnLabel">Refresh Page</span>
+    </button>
     <div class="preset-row">
       <!-- Selecting one loads its saved layout/visuals; Reset to Defaults
            resets THIS preset back to its fixed default (see the
@@ -2569,7 +2635,9 @@
         <label for="fontPicker">Element Font:</label>
         <div class="font-picker-row">
           <button class="load-fonts-btn" id="loadSystemFonts" type="button">Load System Fonts</button>
-          <select id="fontPicker"></select>
+          <div class="arrowed-select-wrap">
+            <select id="fontPicker" class="arrowed-select"></select>
+          </div>
         </div>
       </div>
       <p class="font-picker-note" id="fontPickerNote"></p>
@@ -2642,12 +2710,14 @@
       <div class="control-row feature-row">
         <div class="feature-row-toggle">
           <label for="marqueeBulbMode">Marquee Bulbs:</label>
-          <select id="marqueeBulbMode" class="marquee-bulb-mode-select" aria-label="Which areas show the scrolling marquee light bulb ring">
-            <option value="off">Off</option>
-            <option value="all">All (Elements + Layout)</option>
-            <option value="elements">Elements Only</option>
-            <option value="layout">Layout Only</option>
-          </select>
+          <div class="arrowed-select-wrap">
+            <select id="marqueeBulbMode" class="marquee-bulb-mode-select arrowed-select" aria-label="Which areas show the scrolling marquee light bulb ring">
+              <option value="off">Off</option>
+              <option value="all">All (Elements + Layout)</option>
+              <option value="elements">Elements Only</option>
+              <option value="layout">Layout Only</option>
+            </select>
+          </div>
         </div>
         <div class="feature-row-sliders">
           <div class="feature-row-slider">
@@ -6960,6 +7030,16 @@
     root.style.setProperty('--font-display', `"${name}", 'Segoe UI', Arial, sans-serif`);
     setupAllTickers();
   }
+  // Flashes the Lock Layout pill — the visible answer to "why didn't my
+  // click do anything" when the stage is locked. Remove+reflow+re-add so
+  // rapid repeat clicks each get their own flash instead of the second
+  // click silently no-op'ing against an already-present class.
+  function flashLockToggle() {
+    const toggle = editModeInput.closest('.edit-toggle');
+    toggle.classList.remove('lock-flash');
+    void toggle.offsetWidth;
+    toggle.classList.add('lock-flash');
+  }
   // ============================================================
   // 7. Event wiring — every addEventListener call in the file lives
   // here, in one place, in the same order as the controls appear
@@ -6978,6 +7058,13 @@
     stage.classList.toggle('editing', editMode);
     document.getElementById('lockLayoutLabel').textContent = e.target.checked ? 'Unlock Layout:' : 'Lock Layout:';
     document.getElementById('lockIcon').classList.toggle('unlocked', !e.target.checked);
+  });
+  // Clicking anywhere on the stage while locked (background, or an
+  // object/handle — their own pointerdown handlers bail out on
+  // !editMode before doing anything, so this still bubbles up here)
+  // flashes the Lock Layout pill instead of silently doing nothing.
+  stage.addEventListener('pointerdown', () => {
+    if (!editMode) flashLockToggle();
   });
   // Editing-view zoom only — see the ZOOM_SCALE/zoomedIn comment above.
   // Purely visual: doesn't touch layout, visuals, or anything exported.
@@ -7977,7 +8064,7 @@
   if (refreshPageBtn) {
     refreshPageBtn.addEventListener('click', () => {
       refreshPageBtn.disabled = true;
-      refreshPageBtn.textContent = 'Saving…';
+      document.getElementById('refreshPageBtnLabel').textContent = 'Saving…';
       const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
       Promise.race([saveLayoutToBackend(), timeout]).finally(() => location.reload());
     });
