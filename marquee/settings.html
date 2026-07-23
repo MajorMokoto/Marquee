@@ -1,28 +1,46 @@
-<div class="space-y-6 py-2">
-    <div class="bg-dark-900/50 p-3 rounded-xl border border-gray-800/50">
-        <h3 class="text-sm font-medium text-gray-200 mb-1">Configure how it looks</h3>
-        <p class="text-[11px] text-gray-500 mb-3">In the Marquee Editor you can set the position of the song elements to your preferences. There are included presets for most common stream setups. This plugin is ideal for streamers who want to display the current song information on their stream.</p>
+<div class="space-y-6 py-2" id="marquee-settings-root">
+    <!--
+        Colors here read FeedBack's live theme via the compiled `fb-*`
+        Tailwind classes (theme-core.js re-points them when a theme is
+        equipped — see root CLAUDE.md's "Two coexisting visual languages"
+        note). The two things Tailwind can't express as precompiled
+        utilities (legible text ON an accent-filled button, and a lightened
+        input-field surface derived from the card color) read the
+        --fbv-* CSS custom properties directly instead. Never hardcode a
+        hex color in this file — read it from an fb-* class or --fbv-*
+        token so this page keeps following the accent theme picker.
+    -->
+    <style>
+        #marquee-settings-root .fb-btn-accent { color: rgb(var(--fbv-on-accent, 248 250 252)); }
+        #marquee-settings-root .fb-field {
+            background-color: color-mix(in srgb, rgb(var(--fbv-card, 30 41 59)) 100%, white 10%);
+        }
+    </style>
+
+    <div class="bg-fb-cardMuted p-3 rounded-xl border border-fb-border">
+        <h3 class="text-sm font-medium text-fb-text mb-1">Configure how it looks</h3>
+        <p class="text-[11px] text-fb-textDim mb-3">In the Marquee Editor you can set the position of the song elements to your preferences. There are included presets for most common stream setups. This plugin is ideal for streamers who want to display the current song information on their stream.</p>
         <button onclick="window._marqueeOpenScreen()"
-                class="px-3 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90">Open Marquee Editor</button>
+                class="fb-btn-accent px-3 py-2 text-xs font-medium rounded-lg bg-fb-accent hover:opacity-90">Open Marquee Editor</button>
     </div>
 
-    <div class="bg-dark-900/50 p-3 rounded-xl border border-gray-800/50">
-        <h3 class="text-sm font-medium text-gray-200 mb-1">OBS Browser Source URL</h3>
-        <p class="text-[11px] text-gray-500 mb-3">To use Marquee, add a Browser Source in OBS. Use the URL below. In OBS Browser Source for Marquee set the Width/Height to match the Width/Height you set in the Marquee editor. This will give you a perfect 1 to 1 marquee image in OBS.</p>
+    <div class="bg-fb-cardMuted p-3 rounded-xl border border-fb-border">
+        <h3 class="text-sm font-medium text-fb-text mb-1">OBS Browser Source URL</h3>
+        <p class="text-[11px] text-fb-textDim mb-3">To use Marquee, add a Browser Source in OBS. Use the URL below. In OBS Browser Source for Marquee set the Width/Height to match the Width/Height you set in the Marquee editor. This will give you a perfect 1 to 1 marquee image in OBS.</p>
         <div class="flex items-center gap-2">
             <input id="marquee-url" type="text" readonly
-                   class="flex-1 bg-dark-800 border-none rounded-lg px-3 py-2 text-xs text-white font-mono outline-none">
+                   class="fb-field flex-1 border-none rounded-lg px-3 py-2 text-xs text-fb-text font-mono outline-none">
             <button onclick="window._marqueeCopyUrl()"
-                    class="px-3 py-2 text-xs font-medium rounded-lg bg-accent text-white hover:opacity-90">Copy</button>
+                    class="fb-btn-accent px-3 py-2 text-xs font-medium rounded-lg bg-fb-accent hover:opacity-90">Copy</button>
         </div>
-        <p id="marquee-copied" class="text-[11px] text-accent mt-2" style="visibility:hidden;">Copied.</p>
-        <p id="marquee-canvas-size" class="text-[11px] text-gray-500 mt-2"></p>
+        <p id="marquee-copied" class="text-[11px] text-fb-accent mt-2" style="visibility:hidden;">Copied.</p>
+        <p id="marquee-canvas-size" class="text-[11px] text-fb-textDim mt-2"></p>
     </div>
 
-    <div class="bg-dark-900/50 p-3 rounded-xl border border-gray-800/50">
-        <h3 class="text-sm font-medium text-gray-200 mb-1">Live status</h3>
-        <p id="marquee-status" class="text-[11px] text-gray-500">Checking…</p>
-        <p id="marquee-song" class="text-[11px] text-gray-500 mt-1"></p>
+    <div class="bg-fb-cardMuted p-3 rounded-xl border border-fb-border">
+        <h3 class="text-sm font-medium text-fb-text mb-1">Live status</h3>
+        <p id="marquee-status" class="text-[11px] text-fb-textDim">Checking…</p>
+        <p id="marquee-song" class="text-[11px] text-fb-textDim mt-1"></p>
     </div>
 
 </div>

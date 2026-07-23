@@ -1,4 +1,14 @@
-<title>Marquee — Layout Editor</title><meta name="viewport" content="width=device-width, initial-scale=1" /><style>
+<title>Marquee — Layout Editor</title><meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Bridges the Visual Settings panel's --vs-* tokens to FeedBack's live
+     theme (see the :root block below). Same-origin when served for real via
+     GET /api/plugins/marquee/editor (routes.py registers on the host's own
+     top-level FastAPI app — see marquee/CLAUDE.md), so this resolves
+     against the real host and keeps --fbv-* live as themes change. When
+     editor.html is opened standalone (dev static server, file://), this
+     404s harmlessly and every --vs-* falls back to its original hardcoded
+     default below — no behavior change in that context. -->
+<script src="/static/v3/theme-core.js"></script>
+<style>
   /*
     Intentionally single-theme. This previews a broadcast graphic meant to
     sit over gameplay video in OBS — like OBS/Resolve/Twitch tooling itself,
@@ -102,20 +112,42 @@
     --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'Consolas', 'SFMono-Regular', Menlo, monospace;
   }
-  /* Visual Settings panel restyle — a deliberately separate palette from
-     the rest of the editor's warm/theatrical chrome (--void/--gold/etc
-     above), scoped entirely to #visualSettingsPanel so it never leaks
-     into the Elements/Import-Export panels that share .panel/.control-row/
-     .switch with it. --vs-accent is its OWN chrome accent — never rename
-     this to --accent or point it at that var; --accent is the overlay's
-     own user-configurable theme color (the Accent Color row below drives
-     it) and must stay decoupled from this panel's UI chrome. */
+  /* Editor chrome restyle — a deliberately separate palette from the rest
+     of the editor's warm/theatrical chrome (--void/--gold/etc above).
+     Originally scoped to just the Visual Settings panel; now applied
+     editor-wide via plain `.panel` selectors (every settings panel —
+     Visual Settings, Elements, Marquee Roll, Custom Text, Import/Export —
+     plus `.toolbar-toggles .vs-checkbox` for the toolbar's own switches,
+     added explicitly since the toolbar isn't inside a `.panel`) so the
+     whole editor reads as one consistent app instead of one restyled
+     panel next to unstyled ones. --vs-accent is its OWN chrome accent —
+     never rename this to --accent or point it at that var; --accent is
+     the overlay's own user-configurable theme color (the Accent Color
+     row below drives it) and must stay decoupled from this UI chrome.
+
+     Each --vs-* value reads FeedBack's own live theme token (--fbv-*,
+     injected by the <script> above) with a fallback matching this panel's
+     original fixed look — so it now follows whichever theme the user has
+     equipped in FeedBack itself, the same mechanism plugin settings pages
+     like Audio Engine use, while degrading to the original near-black/red
+     look untouched if --fbv-* isn't present (theme-core.js didn't load). */
   :root {
-    --vs-page-bg: #0d0d0d;
-    --vs-card-bg: #1a1a1a;
-    --vs-accent: #ef4444;
-    --vs-border: rgba(255, 255, 255, 0.1);
-    --vs-text-dim: #9a9a9a;
+    --vs-page-bg: rgb(var(--fbv-bg, 13 13 13));
+    --vs-card-bg: rgb(var(--fbv-card, 26 26 26));
+    --vs-accent: rgb(var(--fbv-accent, 239 68 68));
+    --vs-border: rgb(var(--fbv-border, 255 255 255) / 0.1);
+    --vs-text-dim: rgb(var(--fbv-textDim, 154 154 154));
+    /* One shared floor height for any row's control-content zone. Set to
+       the TALLEST naturally-occurring content — a row-pair's own slider
+       cell (label + track, using the row's normal larger label size),
+       measured at 41px after tightening .control-row's oversized wrapped-
+       line gap (see that rule's own comment) — rather than a feature-
+       row's single slider block (33px, smaller sub-label), so nothing
+       needs to shrink: every shorter control type (checkbox, stepper,
+       swatches, a feature-row's slider stack) gets raised to match via
+       min-height, and the row-pair sliders that already reach it
+       naturally are untouched. */
+    --vs-row-unit: 41px;
   }
   * { box-sizing: border-box; }
   body {
@@ -212,6 +244,17 @@
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
+    /* Shared width for all 6 toolbar controls (.edit-toggle pills on the
+       left, .reset-btn buttons + .preset-row on the right) — measured
+       from the left column's natural stretch-to-widest width ("Element
+       Outlines:"), then applied as an explicit width everywhere so the
+       right column matches instead of sizing to its own content. Same
+       idea for height — .edit-toggle's checkbox+label content and
+       .reset-btn/.preset-select's plain text naturally settle at
+       different heights (34px vs 40px) with matching padding, so this is
+       set explicitly everywhere too rather than left to content. */
+    --toolbar-item-w: 170px;
+    --toolbar-item-h: 40px;
   }
   /* Lock Layout, Zoom, and Element Outlines stacked as three identical
      rounded pill-toggles (moved here from separate buttons next to the
@@ -224,36 +267,93 @@
      button sits flush against the right edge of the taller one above it,
      not left-aligned under it. */
   .toolbar-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-  .preset-row { display: flex; align-items: center; gap: 8px; }
-  .preset-label { font-size: 0.82rem; font-weight: 700; color: var(--paper); }
-  /* Same look as select#fontPicker, generalized to a class since this is
-     the second dark-themed <select> in the file. */
+  /* Toolbar chrome (this select, .edit-toggle, .reset-btn) now reads the
+     --vs-* tokens like the Visual Settings panel does, rather than the
+     old --void/--gold/--paper theatrical palette — extends the same
+     precedent already set when these toggles' own checkboxes were moved
+     to .vs-checkbox. Same var(--vs-card-bg) fill as .edit-toggle (not
+     the darker var(--vs-page-bg)) so all 6 toolbar controls read as the
+     same shade of card, and a shared --toolbar-item-w so the right
+     column's buttons/dropdown match the left column's pill width instead
+     of each sizing to its own content. */
+  .preset-row { display: flex; align-items: center; width: var(--toolbar-item-w); position: relative; }
+  /* An exact visual clone of .reset-btn's pill — own background/border/
+     radius on all four sides, not a partial overlay — so this control's
+     shape/outline are pixel-identical to Reset to Defaults/Refresh Page
+     above it, not a patched-together mix of a covered .preset-select's
+     shape and this label's. pointer-events:none so clicks pass through to
+     the real select, which sits on top of this (see .preset-select below)
+     fully transparent — invisible, but still the thing actually clicked,
+     focused, and opened. */
+  .preset-static-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--toolbar-item-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+    background: var(--vs-card-bg);
+    border: 1px solid var(--vs-border);
+    border-radius: 999px;
+    color: #f2f2f2;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .preset-static-label::after {
+    content: '▾';
+    color: var(--vs-text-dim);
+    font-weight: 400;
+    /* 2x .preset-static-label's own 0.78rem (the size it would otherwise
+       inherit). */
+    font-size: 1.56rem;
+  }
+  /* Same hover treatment as .reset-btn — the label, not .preset-select
+     itself, since the label (not the transparent select) is what's
+     actually visible; relies on the select now coming first in DOM (see
+     the HTML comment above it) so this plain adjacent-sibling selector
+     can react to the real element the mouse is over. */
+  .preset-select:hover + .preset-static-label { color: #f2f2f2; border-color: var(--vs-text-dim); }
   .preset-select {
-    background: var(--void);
-    color: var(--paper);
-    border: 1px solid rgba(243, 233, 216, 0.25);
-    /* Pill, matching .reset-btn right above it — not select#fontPicker's
-       4px, which read as mismatched sitting directly under a rounded
-       button. */
+    flex: 1;
+    min-width: 0;
+    height: var(--toolbar-item-h);
+    /* Fully invisible — .preset-static-label above is everything actually
+       seen. Still a real, positioned, same-size <select> underneath, so
+       it stays clickable/focusable/keyboard-operable exactly as before. */
+    opacity: 0;
+    background: var(--vs-card-bg);
+    color: #f2f2f2;
+    /* Without this, Chrome doesn't know this is an intentionally-dark
+       control and auto-darkens the native OPEN popup on top of our own
+       colors — every unselected <option> ends up rendering near-invisible
+       (dark-on-dark), while the one browser-highlighted row (blue system
+       highlight, exempt from the auto-dark pass) stayed readable. The
+       option rule right below is the same fix belt-and-braces: explicit
+       author colors on <option> itself, which Chrome also honors. Both
+       still matter with the select itself invisible — the OPEN popup
+       isn't part of this element's own opacity, it's a separate native
+       surface. */
+    color-scheme: dark;
+    border: 1px solid var(--vs-border);
     border-radius: 999px;
     padding: 8px 14px;
     font-size: 0.82rem;
     font-family: var(--font-body);
-    max-width: 200px;
   }
+  .preset-select option { background: var(--vs-card-bg); color: #f2f2f2; }
   .edit-toggle {
     display: flex;
     align-items: center;
-    /* .toolbar-toggles is a column flex container with no align-items
-       override, so it defaults to stretch — all three pills already
-       share the width of the widest one ("Element Outlines:"). This
-       pushes the label to the left and the switch to the right of that
-       shared width, so all three switches line up in a column instead
-       of sitting wherever the label text happens to end. */
+    width: var(--toolbar-item-w);
+    height: var(--toolbar-item-h);
     justify-content: space-between;
     gap: 10px;
-    background: var(--void-2);
-    border: 1px solid rgba(243, 233, 216, 0.12);
+    background: var(--vs-card-bg);
+    border: 1px solid var(--vs-border);
     border-radius: 999px;
     /* Mirrored from 6px 14px 6px 6px — the extra room used to sit on the
        right for the text (switch was on the left, hugging it tight);
@@ -261,30 +361,36 @@
        left, for the text. */
     padding: 6px 6px 6px 14px;
   }
-  .edit-toggle span.label { font-size: 0.82rem; font-weight: 700; color: var(--paper); }
-  .switch { position: relative; width: 38px; height: 20px; flex: none; }
-  /* z-index matters here: .track/.thumb are later siblings with the same
-     absolute+inset:0 footprint, so without this the input — first in DOM,
-     z-index:auto — paints (and hit-tests) BELOW them and is never actually
-     clickable directly, only reachable via a <label> that wraps it. */
-  .switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; cursor: pointer; margin: 0; }
-  .switch .track { position: absolute; inset: 0; background: rgba(243, 233, 216, 0.18); border-radius: 10px; transition: background .15s; }
-  .switch .thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--paper-dim); transition: transform .15s, background .15s; }
-  .switch input:checked + .track { background: color-mix(in srgb, var(--gold) 55%, transparent); }
-  .switch input:checked + .track + .thumb { transform: translateX(18px); background: var(--gold); }
+  .edit-toggle span.label { font-size: 0.82rem; font-weight: 700; color: #f2f2f2; }
+  /* Same hover treatment as .reset-btn/.preset-static-label — border only,
+     since this label is already #f2f2f2 at rest (no dim state to
+     brighten from). A plain :hover on the pill itself is enough here —
+     unlike the preset dropdown, nothing here is a transparent element
+     sitting on top of the real hoverable control, so no sibling-selector
+     trick is needed. */
+  .edit-toggle:hover { border-color: var(--vs-text-dim); }
   .reset-btn {
-    background: transparent;
-    border: 1px solid rgba(243, 233, 216, 0.25);
-    color: var(--paper-dim);
+    width: var(--toolbar-item-w);
+    height: var(--toolbar-item-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--vs-card-bg);
+    border: 1px solid var(--vs-border);
+    color: var(--vs-text-dim);
     font-size: 0.78rem;
     font-weight: 600;
     padding: 8px 14px;
     border-radius: 999px;
     cursor: pointer;
   }
-  .reset-btn:hover { color: var(--paper); border-color: var(--paper-dim); }
-  .reset-btn:focus-visible, .swatch:focus-visible, .load-fonts-btn:focus-visible, input:focus-visible {
+  .reset-btn:hover { color: #f2f2f2; border-color: var(--vs-text-dim); }
+  .swatch:focus-visible, .load-fonts-btn:focus-visible, input:focus-visible {
     outline: 2px solid var(--gold);
+    outline-offset: 2px;
+  }
+  .reset-btn:focus-visible {
+    outline: 2px solid var(--vs-accent);
     outline-offset: 2px;
   }
   /* No focus/click highlight on the closed select box itself for either
@@ -1181,6 +1287,34 @@
     gap: 14px;
   }
   .panel-title { font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--paper-dim); font-weight: 700; margin: 0; }
+  /* Outer tab bar — one level up from .settings-tabs/.settings-tab (the
+     Visual Settings panel's own internal Global/Customize split, further
+     below), deliberately given its own class names rather than reusing
+     those so two different-level tab bars never share identical
+     classnames. Sits as an attached header directly above whichever
+     .panel[data-tab] is currently visible — see the tab-switch JS near
+     the end of the script for how panels get shown/hidden. */
+  .panel-tabs {
+    width: var(--content-width);
+    display: flex;
+    gap: 4px;
+    background: var(--vs-card-bg);
+    border: 1px solid var(--vs-border);
+    border-radius: 8px 8px 0 0;
+    padding: 0 8px;
+  }
+  .panel-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--vs-text-dim);
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 10px 14px;
+    cursor: pointer;
+  }
+  .panel-tab:hover { color: #f2f2f2; }
+  .panel-tab.active { color: var(--vs-accent); border-bottom-color: var(--vs-accent); }
   /* Global/Customize split for the Visual Settings panel — see the HTML
      comment above .settings-tabs for the split's own reasoning. Plain
      underline-style tabs, not pills, so they read as "which page of this
@@ -1211,7 +1345,12 @@
      list — see customizeEnableToggle — not per row. */
   .customize-setting-row { display: flex; align-items: center; gap: 10px; }
   .customize-setting-row label { flex: 1; min-width: 0; }
-  .customize-setting-row .control-cell { flex: none; display: flex; align-items: center; gap: 6px; }
+  /* min-height matches --vs-row-unit (see the .panel .feature-row-sliders
+     etc. rule for why) — a bare checkbox/select/color-swatch control
+     rendered directly in this cell (no .font-picker-row/.swatches wrapper
+     of its own in the Customize tab's plain rows) would otherwise be
+     shorter than a slider row and break the same cross-row consistency. */
+  .customize-setting-row .control-cell { flex: none; display: flex; align-items: center; gap: 6px; min-height: var(--vs-row-unit); }
   /* :not([type=checkbox]) matters here: a checkbox row's real input is
      the switch's hidden native checkbox (.switch input, opacity:0 — see
      that rule). This block's ONLY job elsewhere is dimming disabled
@@ -1227,28 +1366,44 @@
   .customize-setting-row .control-cell select:disabled { opacity: 0.45; }
   .customize-setting-row .control-cell .switch { transition: opacity .15s; }
   .customize-setting-row .control-cell .switch.is-disabled { opacity: 0.45; }
-  /* ---- Visual Settings panel restyle (FeedBack host-app style) ----
-     Everything below is scoped under #visualSettingsPanel so it can't
-     leak into the Elements List / Import-Export panels, which reuse
-     .panel/.control-row/.switch/.font-picker-row too — see the --vs-*
-     token comment near the top of this block for why a whole separate
-     palette exists here instead of reusing --void/--gold/--paper. */
-  #visualSettingsPanel {
+  /* Row-level counterpart to the control-cell dimming above — that only
+     ever touched the control itself (input/select/switch), so a row's
+     label text stayed full-brightness even while its control sat greyed
+     out and disabled right next to it, reading inconsistently "half
+     disabled". .is-disabled here is the row's own class (set in
+     renderCustomizeSettingRows from the same useCustom flag that already
+     drives every control's disabled state), not to be confused with the
+     .switch's own same-named class above — different elements, same
+     name, both meaning "Enable Customizations is off". */
+  .customize-setting-row.is-disabled label { opacity: 0.45; }
+  /* ---- Editor chrome restyle (FeedBack host-app style) ----
+     Everything below is scoped under plain `.panel` selectors — applies
+     to all five settings panels (Visual Settings, Elements, Marquee Roll,
+     Custom Text, Import/Export) alike, deliberately, now that all of them
+     get this treatment; see the --vs-* token comment near the top of this
+     block for why a whole separate palette exists here instead of reusing
+     --void/--gold/--paper. The Customize-tab-only rules further below
+     (`.customize-setting-row .control-cell`, `.customize-enable-band`)
+     stay scoped to `#visualSettingsPanel` specifically — that markup only
+     ever exists inside the Visual Settings panel's own Customize tab. */
+  .panel {
     background: var(--vs-page-bg);
     border-color: var(--vs-border);
   }
-  #visualSettingsPanel .panel-title { color: #f2f2f2; }
+  .panel .panel-title { color: #f2f2f2; }
   /* Denser than the shared .control-row default below — this panel has
      ~28 settings where every other panel only ever shows a handful, so
      the generous default spacing reads as wasted space here specifically. */
-  #visualSettingsPanel .control-row {
+  .panel .control-row {
     padding: 5px 6px;
     border-bottom-color: var(--vs-border);
   }
-  /* Overrides the shared rule's hardcoded orange (line ~1258) — that
-     rule stays untouched for other panels; this one only fires inside
-     #visualSettingsPanel, at higher specificity. */
-  #visualSettingsPanel .control-row:hover {
+  /* Overrides the shared rule's hardcoded orange hover below — that base
+     rule is now effectively dead (every .control-row lives inside a
+     .panel, so this two-class selector always wins), left in place
+     untouched rather than deleted since removing genuinely-unused CSS
+     isn't part of this change. */
+  .panel .control-row:hover {
     background: rgba(255, 255, 255, 0.04);
     border-color: var(--vs-accent);
   }
@@ -1257,38 +1412,79 @@
      pairs, not its title) so :last-child below resolves per-section
      instead of across the whole flat tab like the old .control-row:last-
      child (line ~1252) did. */
-  #visualSettingsPanel .settings-section {
+  .panel .settings-section {
     background: var(--vs-card-bg);
     border-radius: 8px;
     padding: 6px 12px;
   }
-  #visualSettingsPanel .settings-section + .settings-section { margin-top: 10px; }
-  #visualSettingsPanel .settings-section-title {
+  .panel .settings-section + .settings-section { margin-top: 10px; }
+  .panel .settings-section-title {
     font-size: 0.92rem;
     font-weight: 700;
     color: #f2f2f2;
     margin: 4px 0 2px;
   }
-  #visualSettingsPanel .settings-section-rows { display: flex; flex-direction: column; }
-  #visualSettingsPanel .settings-section-rows > .control-row:last-child,
-  #visualSettingsPanel .settings-section-rows > .settings-row-pair:last-child {
+  .panel .settings-section-rows { display: flex; flex-direction: column; }
+  /* Transparent, not none — a last row still needs a real dashed border
+     to color on :hover (see .panel .control-row:hover below); border-
+     style:none has no width for :hover's border-color change to show,
+     which was silently swallowing the hover feedback specifically on
+     each section's last row.
+     :not(:hover) is load-bearing, not decorative: this selector (4
+     classes/pseudo-classes) is MORE specific than .panel .control-row:hover
+     (3), so without it this rule's border-bottom-color would always beat
+     the hover rule's border-color and the line would never show even
+     while actually hovering — the exact bug being fixed here. Excluding
+     :hover from this selector means it simply doesn't match while
+     hovering, so .control-row:hover is the only rule left standing and
+     wins uncontested.
+     No padding-bottom reduction here (unlike the row-pair's own last-
+     child rule below, which still has one) — this row now gets the same
+     padding as every other row, so a 0-slider feature that's also its
+     section's last row still matches a 1-slider row's height exactly
+     (see .feature-row-sliders:empty's min-height above). The section
+     card itself has enough of its own bottom padding now that this
+     doesn't reintroduce a dangling gap before the card's edge. */
+  .panel .settings-section-rows > .control-row:last-child:not(:hover) {
+    border-bottom-color: transparent;
+  }
+  /* No padding-bottom reduction here either — same reasoning as the
+     plain .control-row:last-child fix above: full, consistent padding
+     everywhere is what makes every row/pair's height actually match, and
+     the section card's own bottom padding already covers spacing before
+     the card edge. border-bottom:none stays — that's this pair's own
+     divider line, a separate concern from padding/height. */
+  .panel .settings-section-rows > .settings-row-pair:last-child {
     border-bottom: none;
-    padding-bottom: 0;
   }
   /* Two short rows packed side by side instead of each taking the full
      panel width — the pair as a whole carries the row divider; its two
      cells don't (see the next rule) since a pair should read as one
      dense row, not two. */
-  #visualSettingsPanel .settings-row-pair {
+  .panel .settings-row-pair {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 4px 20px;
     padding: 5px 6px;
     border-bottom: 1px solid var(--vs-border);
   }
-  #visualSettingsPanel .settings-row-pair > .control-row {
+  .panel .settings-row-pair > .control-row {
     padding: 0;
-    border-bottom: none;
+  }
+  /* Each cell gets its own dashed hover-affordance now too, same as any
+     standalone row — invisible normally (the pair's own solid divider
+     above is the permanent one; a visible dashed line AND a solid line
+     stacked here would look cluttered), colored on hover via
+     .control-row:hover. Was unconditionally border-bottom:none before,
+     which — like the last-child case above — left literally no border
+     for :hover to color, so pair cells never showed hover feedback at
+     all, in any position. :not(:hover) for the same specificity reason
+     as the last-child rule: this selector (3 classes) ties .control-row
+     :hover's specificity (3), and this one is declared later in the
+     file, so without :not(:hover) it would silently win over the hover
+     rule by source order and re-break the exact thing being fixed. */
+  .panel .settings-row-pair > .control-row:not(:hover) {
+    border-bottom-color: transparent;
   }
   /* A slider row's label+value sit on one line; the slider itself
      (wrapped in .vs-slider-row, see enhanceSlider() in the script) is
@@ -1298,14 +1494,88 @@
      job is one slider; the two color+slider combo rows (Element/
      Background Color-Transparency) stay single-line, they're already
      full width with room to spare. */
-  #visualSettingsPanel .control-row--slider .vs-slider-row { flex-basis: 100%; }
+  .panel .control-row--slider .vs-slider-row { flex-basis: 100%; }
+  /* Feature row — a checkbox and the slider(s) that only do anything
+     while it's on, read as one unit: checkbox+label on the left, its own
+     slider(s) stacked on the right (a zero-slider feature just leaves
+     that side empty). .control-row's own space-between already pushes
+     these two children to opposite ends.
+     align-items:flex-start + a fixed margin-top on .feature-row-toggle
+     below, NOT align-items:center — a feature can gain more sliders as
+     menus grow (2, 3+, all stacked), and true centering would push the
+     checkbox further down every time a row gets taller, drifting from
+     where every 0/1-slider row's checkbox sits. Fixing the toggle at a
+     constant distance from the row's own top instead means it stays put
+     regardless of how many sliders pile up on the right. 17px is
+     calibrated, not guessed: measured from a real 1-slider row where the
+     checkbox WAS centered (21px from the row's top edge, in a 64px row)
+     minus the row's own 4px top padding = 17px of additional margin on
+     top of that padding — reproduces that exact 21px position without
+     depending on the row's total height, so 0/1-slider rows look
+     unchanged and multi-slider rows now match them instead of drifting.
+     Used identically in both the Global tab (hand-authored) and the
+     Customize tab (built by renderCustomizeSettingRows/renderFeatureRow)
+     so a feature looks the same in either place. */
+  .panel .feature-row { align-items: flex-start; }
+  .panel .feature-row-toggle {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 17px;
+  }
+  .panel .feature-row-sliders {
+    flex: 0 0 260px;
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+  }
+  /* One standard content-floor height (--vs-row-unit, defined at :root),
+     applied to every kind of control-content wrapper a row can have —
+     not just feature-rows. None of these elements carry their own
+     padding (confirmed against each one's own rule), so min-height here
+     means exactly what it says: this content is at least one row-unit
+     tall, full stop, regardless of whether it holds a slider, a
+     checkbox, a stepper, swatches, or nothing at all. That's what makes
+     unrelated rows/pairs — which have no other way to know about each
+     other's height — end up the same size without hand-measuring and
+     hardcoding each pair's own match, like the two rules this replaced
+     used to.
+       .feature-row-sliders   — empty (0-slider feature) or holding 1+
+                                 real .feature-row-slider blocks
+       .settings-row-pair > .control-row — every paired cell, slider or
+                                 stepper alike (already padding:0)
+       .font-picker-row       — color/slider combos, the font row
+       .fontsize-field        — steppers, standalone or paired
+       .swatches              — the Accent Color row */
+  .panel .feature-row-sliders,
+  .panel .settings-row-pair > .control-row,
+  .panel .font-picker-row,
+  .panel .fontsize-field,
+  .panel .swatches {
+    min-height: var(--vs-row-unit);
+  }
+  .panel .feature-row-slider { display: flex; flex-direction: column; gap: 2px; }
+  .panel .feature-row-slider label {
+    font-size: 0.68rem;
+    color: var(--vs-text-dim);
+    font-weight: 600;
+  }
   /* New square checkbox, replacing the pill .switch used elsewhere in the
      editor (toolbar, Elements list) — matches the FeedBack host-app
      screenshots' plain outline-square convention (marquee/design/
      reference.md, Layout patterns). Native input styled directly via
      appearance:none rather than the .switch's track+thumb span trio, so
      there's no wrapper markup to keep in sync. */
-  #visualSettingsPanel .vs-checkbox {
+  /* .toolbar-toggles .vs-checkbox added to every rule here explicitly —
+     the toolbar's 3 switches (Lock Layout/Zoom In/Element Outlines) sit
+     above the panels, not inside one, so they don't pick up `.panel
+     .vs-checkbox` for free. */
+  .panel .vs-checkbox,
+  .toolbar-toggles .vs-checkbox {
     appearance: none;
     width: 15px;
     height: 15px;
@@ -1317,11 +1587,13 @@
     cursor: pointer;
     position: relative;
   }
-  #visualSettingsPanel .vs-checkbox:checked {
+  .panel .vs-checkbox:checked,
+  .toolbar-toggles .vs-checkbox:checked {
     border-color: var(--vs-accent);
     background: var(--vs-accent);
   }
-  #visualSettingsPanel .vs-checkbox:checked::after {
+  .panel .vs-checkbox:checked::after,
+  .toolbar-toggles .vs-checkbox:checked::after {
     content: '';
     position: absolute;
     left: 4px; top: 1px;
@@ -1330,12 +1602,13 @@
     border-width: 0 2px 2px 0;
     transform: rotate(40deg);
   }
-  #visualSettingsPanel .vs-checkbox:disabled { opacity: 0.45; cursor: default; }
+  .panel .vs-checkbox:disabled,
+  .toolbar-toggles .vs-checkbox:disabled { opacity: 0.45; cursor: default; }
   /* Slider fill + min/max/value labels — the file has no prior art for
      either (see the plain accent-color-tinted native rule this overrides
      below); --fill is written per-input by syncSliderFill() in the
      script, inline, on every 'input' event. */
-  #visualSettingsPanel input[type="range"] {
+  .panel input[type="range"] {
     appearance: none;
     width: 100%;
     min-width: 50px;
@@ -1346,7 +1619,7 @@
       rgba(255, 255, 255, 0.15) var(--fill, 0%), rgba(255, 255, 255, 0.15) 100%);
     cursor: pointer;
   }
-  #visualSettingsPanel input[type="range"]::-webkit-slider-thumb {
+  .panel input[type="range"]::-webkit-slider-thumb {
     appearance: none;
     width: 13px; height: 13px;
     border-radius: 50%;
@@ -1354,7 +1627,7 @@
     box-shadow: 0 0 0 2px var(--vs-card-bg);
     cursor: grab;
   }
-  #visualSettingsPanel input[type="range"]::-moz-range-thumb {
+  .panel input[type="range"]::-moz-range-thumb {
     width: 13px; height: 13px;
     border: none;
     border-radius: 50%;
@@ -1362,10 +1635,10 @@
     box-shadow: 0 0 0 2px var(--vs-card-bg);
     cursor: grab;
   }
-  #visualSettingsPanel input[type="range"]:disabled { opacity: 0.45; cursor: default; }
-  #visualSettingsPanel .vs-slider-row { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
-  #visualSettingsPanel .vs-slider-min,
-  #visualSettingsPanel .vs-slider-max {
+  .panel input[type="range"]:disabled { opacity: 0.45; cursor: default; }
+  .panel .vs-slider-row { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .panel .vs-slider-min,
+  .panel .vs-slider-max {
     font-family: var(--font-mono);
     font-size: 0.66rem;
     color: var(--vs-text-dim);
@@ -1374,16 +1647,140 @@
   /* Bold + bright + extra margin so this doesn't visually run together
      with .vs-slider-max right before it — both are small mono numbers,
      but this one is the live value, not a static bound, and needs to
-     read as clearly different at a glance. */
-  #visualSettingsPanel .vs-slider-value {
+     read as clearly different at a glance.
+     Fixed width (not min-width) is load-bearing, not cosmetic: this text
+     changes on every drag/keystroke, and every panel slider's widest
+     possible reading (worst case "= 55.0"/"= 0.00", 6 chars including the
+     prefix) fits inside 7ch — reserving that up front means the box's
+     rendered size never changes as digit count does, so the flex row
+     around it (and therefore the track/thumb, which is the flex-grow
+     sibling absorbing whatever space is left) never resizes either. The
+     overflow:hidden matters too, not just decoration — a flex item's
+     automatic minimum size is otherwise content-based and can silently
+     re-grow the box past its own width for a wide reading regardless of
+     the width set here. */
+  .panel .vs-slider-value {
     font-family: var(--font-mono);
     font-size: 0.72rem;
     font-weight: 700;
     color: #fff;
     flex: none;
     margin-left: 8px;
+    width: 7ch;
+    overflow: hidden;
+    white-space: nowrap;
   }
-  #visualSettingsPanel .vs-slider-value::before { content: '= '; color: var(--vs-text-dim); font-weight: 400; }
+  .panel .vs-slider-value::before { content: '= '; color: var(--vs-text-dim); font-weight: 400; }
+  /* The rest of this block covers classes that were never restyled even
+     inside the Visual Settings panel itself (buttons, text/number/file
+     inputs, textarea, the font-size/roll-assign steppers, the toggle-row
+     card) — same --vs-* token vocabulary as everything above, just filling
+     in corners the original restyle didn't reach. `.panel select` is
+     deliberately never used as a bare catch-all: .marquee-bulb-mode-select
+     and #customizeElementSelect still live inside a .panel too but are out
+     of scope here, so only the narrower `.roll-assign-field select` and
+     #fontPicker (below) get their own rule. */
+  .panel #fontPicker {
+    background: var(--vs-card-bg);
+    color: #f2f2f2;
+    border-color: var(--vs-border);
+  }
+  .panel .load-fonts-btn {
+    background: var(--vs-page-bg);
+    border-color: var(--vs-border);
+    color: var(--vs-text-dim);
+  }
+  .panel .load-fonts-btn:hover { color: #f2f2f2; border-color: var(--vs-text-dim); }
+  .panel .load-fonts-btn.danger:hover { color: #f2f2f2; background: var(--vs-accent); border-color: var(--vs-accent); }
+  .panel .text-input,
+  .panel .io-textarea {
+    background: var(--vs-page-bg);
+    color: #f2f2f2;
+    border-color: var(--vs-border);
+  }
+  .panel .file-input { border-color: var(--vs-border); }
+  .panel .file-input:hover { border-color: var(--vs-text-dim); }
+  .panel .file-input::file-selector-button { color: var(--vs-text-dim); }
+  .panel .file-input::file-selector-button:hover { color: #f2f2f2; }
+  .panel .fontsize-field input[type="number"],
+  .panel .roll-assign-field select,
+  .panel .roll-assign-field input[type="number"] {
+    background: var(--vs-page-bg);
+    color: #f2f2f2;
+    border-color: var(--vs-border);
+  }
+  .panel .fontsize-field .step-btn {
+    background: var(--vs-page-bg);
+    color: var(--vs-text-dim);
+    border-color: var(--vs-border);
+  }
+  .panel .fontsize-field .step-btn:hover { color: #f2f2f2; border-color: var(--vs-text-dim); }
+  .panel .unit { color: var(--vs-text-dim); }
+  .panel .toggle-row {
+    background: var(--vs-page-bg);
+    border-color: var(--vs-border);
+  }
+  .panel .toggle-row.drag-over {
+    border-color: var(--vs-accent);
+    box-shadow: 0 0 0 1px var(--vs-accent);
+  }
+  .panel .drag-handle,
+  .panel .rank-badge { color: var(--vs-text-dim); }
+  .panel .rank-badge { background: var(--vs-card-bg); }
+  .panel .el-label,
+  .panel .el-name-input { color: #f2f2f2; }
+  .panel .el-name-input:hover,
+  .panel .el-name-input:focus { background: var(--vs-card-bg); border-color: var(--vs-border); }
+  .panel .custom-text-row {
+    background: var(--vs-page-bg);
+    border-color: var(--vs-border);
+  }
+  .panel .empty-note { color: var(--vs-text-dim); }
+  /* Customize tab alignment — .control-cell's base rule (line ~1214) is
+     flex:none, i.e. sized to each row's own content, so a plain slider
+     row's control area and a coloralpha row's (color swatch + slider,
+     wider) start at different x-positions and every track ends up a
+     different length. Fixing the width instead — generous enough for the
+     widest row (coloralpha: swatch + track + min/max/value) — means
+     every row reserves the identical space, so every control starts and
+     ends at the same x regardless of what it actually contains; narrower
+     rows (a lone checkbox, a short select) just leave the rest of the
+     box empty rather than pulling their edge in. */
+  #visualSettingsPanel .customize-setting-row .control-cell {
+    flex: 0 0 300px;
+    width: 300px;
+  }
+  /* Enable Customizations band — deliberately NOT a plain .control-row
+     like everything else in this tab, so it reads as "the gate" rather
+     than "one setting among twenty" (that similarity was exactly why
+     testers skipped past it). Tinted/bordered in --vs-accent always;
+     .needs-attention (JS-toggled in syncCustomizeEnableToggle, based on
+     the checkbox's own current checked state) adds a glow ONLY while
+     it's off — once turned on the band stays visually distinct but
+     stops asking for attention it no longer needs. Static box-shadow,
+     not a pulse/animation: pulsing reads as naggy over time and would
+     need a prefers-reduced-motion fallback this doesn't. */
+  #visualSettingsPanel .customize-enable-band {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin: 2px 0 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--vs-accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--vs-accent) 40%, transparent);
+    transition: box-shadow .2s ease, border-color .2s ease;
+  }
+  #visualSettingsPanel .customize-enable-band label {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #fff;
+    cursor: pointer;
+  }
+  #visualSettingsPanel .customize-enable-band.needs-attention {
+    border-color: var(--vs-accent);
+    box-shadow: 0 0 0 1px var(--vs-accent), 0 0 14px 2px color-mix(in srgb, var(--vs-accent) 60%, transparent);
+  }
   /* Reported live: with justify-content:space-between spreading a short
      label all the way from a short control across the panel's full
      width, it was hard to tell at a glance which control belonged to
@@ -1397,8 +1794,22 @@
   .control-row {
     display: flex;
     align-items: center;
+    align-content: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    /* row-gap 4px, column-gap 16px — the 16px was originally a single
+       value doing double duty: horizontal spacing between a label and its
+       inline control (still wants 16px), AND vertical spacing whenever a
+       slider wraps to its own line via .control-row--slider .vs-slider-row
+       {flex-basis:100%} (didn't need nearly that much — it's one setting's
+       own label sitting right above its own control, not two different
+       settings). That oversized vertical gap was the main driver of a
+       row-pair slider cell's natural height (53px) being taller than it
+       needed to be. align-content:flex-start (default is stretch) stops
+       the browser distributing any leftover cross-axis space evenly
+       around/between the two wrapped lines — without it, that leftover
+       space was quietly padding the label/slider apart by more than the
+       gap actually specifies. */
+    gap: 4px 16px;
     flex-wrap: wrap;
     padding: 4px 6px 10px;
     margin: 0 -6px;
@@ -1406,9 +1817,17 @@
     border-bottom: 1px dashed rgba(243, 233, 216, 0.16);
     transition: background-color 0.15s ease, border-color 0.15s ease;
   }
+  /* Transparent, not none — see the identical .panel-scoped comment
+     above for why (keeps a real border for :hover to color on the last
+     row of a panel that isn't using the section-card grouping, e.g.
+     Import/Export). Split from the :not(:hover) rule below so padding
+     never toggles on hover (only the border color does) — a hover-only
+     padding change would shift the row's height as the mouse enters it. */
   .control-row:last-child {
-    border-bottom: none;
     padding-bottom: 4px;
+  }
+  .control-row:last-child:not(:hover) {
+    border-bottom-color: transparent;
   }
   .control-row:hover {
     background: rgba(243, 233, 216, 0.05);
@@ -1477,18 +1896,20 @@
      button) instead of on its own line below — the -4px pull-up above was
      tuned for that below-the-row position and would misalign it here. */
   .font-picker-row .font-picker-note { margin: 0; }
-  /* Fixed 3-wide grid, growing downward as elements are added. All three
+  /* Fixed 2-wide grid, growing downward as elements are added. Both
      columns are always equal (1fr each), stretching to fill the panel
      evenly instead of sitting at a fixed px size with dead space on the
      right. Still uniform — every card is exactly as wide as every other
      card — just sized to the container instead of a hardcoded number.
-     Nothing about a card's CONTENT (a long name, a long custom-text
-     preview) changes its width; text that doesn't fit still scrolls
-     inside its own fixed-width field (see .el-name-input) rather than
-     resizing anything. */
+     Was 3-wide; dropped to 2 because a third column left too little
+     width per card and the row's text (element name, "No Roll" select,
+     etc.) was reading too small/cramped. Nothing about a card's CONTENT
+     (a long name, a long custom-text preview) changes its width; text
+     that doesn't fit still scrolls inside its own fixed-width field (see
+     .el-name-input) rather than resizing anything. */
   .element-toggles {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 16px;
     align-items: start;
     overflow-x: auto;
@@ -1819,28 +2240,16 @@
   </div></div><div class="toolbar">
   <div class="toolbar-toggles">
     <label class="edit-toggle">
-      <span class="label">Lock Layout:</span>
-      <span class="switch">
-        <input type="checkbox" id="editMode" />
-        <span class="track"></span>
-        <span class="thumb"></span>
-      </span>
+      <span class="label" id="lockLayoutLabel">Lock Layout:</span>
+      <input type="checkbox" id="editMode" class="vs-checkbox" />
     </label>
     <label class="edit-toggle">
       <span class="label" id="zoomLabel">Zoom In:</span>
-      <span class="switch">
-        <input type="checkbox" id="zoomToggle" />
-        <span class="track"></span>
-        <span class="thumb"></span>
-      </span>
+      <input type="checkbox" id="zoomToggle" class="vs-checkbox" />
     </label>
     <label class="edit-toggle">
       <span class="label">Element Outlines:</span>
-      <span class="switch">
-        <input type="checkbox" id="outlinesToggle" checked />
-        <span class="track"></span>
-        <span class="thumb"></span>
-      </span>
+      <input type="checkbox" id="outlinesToggle" class="vs-checkbox" checked />
     </label>
   </div>
   <p class="obs-note">
@@ -1851,21 +2260,31 @@
     <button class="reset-btn" id="resetBtn">Reset to Defaults</button>
     <button class="reset-btn" id="refreshPageBtn" type="button" title="Save the current layout, then reload this editor — try this if something looks stuck or out of sync">Refresh Page</button>
     <div class="preset-row">
-      <span class="preset-label">Preset:</span>
       <!-- Selecting one loads its saved layout/visuals; Reset to Defaults
            resets THIS preset back to its fixed default (see the
            presetSelect 'change' handler, the autosave hook, and the
-           resetBtn click handler / PRESETS comment). -->
+           resetBtn click handler / PRESETS comment). presetSelect.value is
+           still the real current preset, read continuously elsewhere
+           (autosave, resetBtn) — .preset-static-label is a purely visual
+           overlay so the closed box always reads "PRESETS" instead of the
+           selected option's own name; it changes nothing about the
+           select's actual value/behavior. select comes BEFORE the label
+           in DOM order (despite painting underneath it — position:absolute
+           already puts the label on top regardless of source order) so
+           the label can react to the real select's :hover via a plain `+`
+           sibling selector, matching .reset-btn's own hover treatment. -->
       <select class="preset-select" id="presetSelect" aria-label="Current preset">
         <option value="Small">Small</option>
         <option value="Standard" selected>Standard</option>
         <option value="Tall">Tall</option>
         <option value="User">User</option>
+        <option value="CraftyGirls">Crafty Girls</option>
         <option value="Rocksniffer">Rocksniffer</option>
         <option value="RocksnifferV1">Rocksniffer v1</option>
         <option value="RocksnifferV2">Rocksniffer v2</option>
         <option value="RocksnifferV3">Rocksniffer v3</option>
       </select>
+      <span class="preset-static-label" aria-hidden="true">PRESETS</span>
     </div>
   </div></div><div class="drag-hint" id="dragHint">
   <p>This is your layout as it will be sent out. Change layout size and other visuals below:</p>
@@ -1931,7 +2350,11 @@
   <!-- Confetti burst, drawn on top of every element regardless of stacking
        order (see .confetti-canvas's z-index). Never intercepts drag/resize
        — pointer-events:none. -->
-  <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas></div><div class="panel" id="visualSettingsPanel">
+  <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas></div><div class="panel-tabs" role="tablist">
+  <button type="button" class="panel-tab active" id="panelTabVisualBtn" role="tab" aria-selected="true" aria-controls="visualSettingsPanel">Visual Settings</button>
+  <button type="button" class="panel-tab" id="panelTabElementsBtn" role="tab" aria-selected="false" aria-controls="elementsPanel">Elements</button>
+  <button type="button" class="panel-tab" id="panelTabImportExportBtn" role="tab" aria-selected="false" aria-controls="importExportPanel">Import/Export</button>
+</div><div class="panel" id="visualSettingsPanel" data-tab="visual" role="tabpanel">
   <p class="panel-title">VISUAL SETTINGS:</p>
   <!-- Global applies to every element identically, exactly like this
        whole panel always has. Customize is per-element: pick one element
@@ -1947,7 +2370,7 @@
   <div class="settings-section">
     <p class="settings-section-title">Layout &amp; Canvas:</p>
     <div class="settings-section-rows">
-      <div class="control-row">
+      <div class="control-row inline">
         <label for="stageWidth">Layout Size:</label>
         <div class="font-picker-row">
           <span class="fontsize-field stage-size-field">
@@ -1968,18 +2391,18 @@
         <div class="control-row control-row--slider">
           <label for="borderWidth">Border Thickness:</label>
           <div class="vs-slider-row">
-            <input type="range" id="borderWidth" min="0" max="6" step="1" value="1" />
+            <input type="range" id="borderWidth" min="0" max="6" step="1" value="1" data-min-label="None" data-max-label="Thick" />
           </div>
         </div>
         <div class="control-row control-row--slider">
           <label for="edgeRounding">Edge Rounding:</label>
           <div class="vs-slider-row">
-            <input type="range" id="edgeRounding" min="0" max="20" step="1" value="0" aria-label="Corner rounding, in pixels, for the canvas and every element" />
+            <input type="range" id="edgeRounding" min="0" max="20" step="1" value="0" aria-label="Corner rounding, in pixels, for the canvas and every element" data-min-label="None" data-max-label="Rounded" />
           </div>
         </div>
       </div>
       <div class="settings-row-pair">
-        <div class="control-row">
+        <div class="control-row inline">
           <label for="elementHeadSize">Element Header Text Size:</label>
           <span class="fontsize-field">
             <button type="button" class="step-btn" id="elementHeadSizeMinus" aria-label="Decrease Element Header Text Size">−</button>
@@ -1988,13 +2411,13 @@
             <span class="unit">px</span>
           </span>
         </div>
-        <div class="control-row">
+        <div class="control-row inline">
           <label for="fadeSeconds">Fade Out Time:</label>
           <span class="fontsize-field">
             <button type="button" class="step-btn" id="fadeSecondsMinus" aria-label="Decrease Fade Out Time">−</button>
             <input type="number" id="fadeSeconds" min="0" max="30" step="0.5" value="10" aria-label="Seconds the overlay takes to fade in/out when a song starts or stops" />
             <button type="button" class="step-btn" id="fadeSecondsPlus" aria-label="Increase Fade Out Time">+</button>
-            <span class="unit">s</span>
+            <span class="unit">sec</span>
           </span>
         </div>
       </div>
@@ -2038,139 +2461,181 @@
         </div>
       </div>
       <p class="font-picker-note" id="fontPickerNote"></p>
-      <div class="control-row">
-        <label for="boldText">Bold Text:</label>
-        <input type="checkbox" id="boldText" class="vs-checkbox" />
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="boldText">Bold Text:</label>
+          <input type="checkbox" id="boldText" class="vs-checkbox" />
+        </div>
+        <div class="feature-row-sliders"></div>
       </div>
     </div>
   </div>
+  <!-- No section title here on purpose — the first row's own checkbox
+       label ("Marquee Text Scroll:") already reads as the section header,
+       so a .settings-section-title above it would just repeat the same
+       text twice in a row. Marquee Bulbs and Confetti below have the same
+       treatment for the same reason. -->
   <div class="settings-section">
-    <p class="settings-section-title">Marquee Scroll:</p>
     <div class="settings-section-rows">
       <!-- The rest of this section only does anything while Marquee
            Scroll itself is on — flair for that effect, not independent
-           settings. -->
-      <div class="settings-row-pair">
-        <div class="control-row">
-          <label for="marqueeScroll">Marquee Scroll:</label>
+           settings. Feature rows (checkbox left, its own slider(s) right)
+           ordered main toggle first, then alphabetical by name — see the
+           .feature-row CSS comment and CUSTOMIZE_SECTION_ORDER's sibling
+           logic in the script for why this mirrors the Customize tab. -->
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeScroll">Marquee Text Scroll:</label>
           <input type="checkbox" id="marqueeScroll" class="vs-checkbox" aria-label="Continuously scroll Song Title/Artist, Tuning, Path, and Year like a marquee sign" />
         </div>
-        <div class="control-row control-row--slider">
-          <label for="marqueeScrollSpeed">Marquee Scroll Speed:</label>
-          <div class="vs-slider-row">
-            <input type="range" id="marqueeScrollSpeed" min="10" max="300" step="10" value="80" aria-label="Marquee scroll speed for Song Title/Artist, Tuning, Path, and Year, in pixels per second" />
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeScrollSpeed">Marquee Scroll Speed:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeScrollSpeed" min="10" max="300" step="10" value="80" aria-label="Marquee scroll speed for Song Title/Artist, Tuning, Path, and Year, in pixels per second" data-min-label="Slow" data-max-label="Fast" />
+            </div>
           </div>
         </div>
       </div>
-      <div class="settings-row-pair">
-        <div class="control-row">
-          <label for="marqueeEdgeFade">Marquee Edge Fade:</label>
-          <input type="checkbox" id="marqueeEdgeFade" class="vs-checkbox" aria-label="Fade scrolling text at the left/right edges instead of a hard clip" />
-        </div>
-        <div class="control-row">
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
           <label for="marqueeSparkle">Marquee Stars:</label>
           <input type="checkbox" id="marqueeSparkle" class="vs-checkbox" aria-label="Show a small twinkling cluster of stars in the gap between repeated scrolling text" />
         </div>
-      </div>
-      <div class="control-row control-row--slider">
-        <label for="marqueeSparkleSize">Marquee Star Size:</label>
-        <div class="vs-slider-row">
-          <input type="range" id="marqueeSparkleSize" min="4" max="64" step="1" value="10" aria-label="Size of the twinkling stars, in pixels — the same size on every element regardless of its own font size" />
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeSparkleSize">Marquee Star Size:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeSparkleSize" min="4" max="64" step="1" value="10" aria-label="Size of the twinkling stars, in pixels — the same size on every element regardless of its own font size" data-min-label="Small" data-max-label="Large" />
+            </div>
+          </div>
         </div>
+      </div>
+      <!-- Zero-slider checkbox — nothing to adjust here, so it sits at
+           the bottom of the section rather than a prominent position. -->
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeEdgeFade">Marquee Edge Fade:</label>
+          <input type="checkbox" id="marqueeEdgeFade" class="vs-checkbox" aria-label="Fade scrolling text at the left/right edges instead of a hard clip" />
+        </div>
+        <div class="feature-row-sliders"></div>
       </div>
     </div>
   </div>
+  <!-- No section title here either — same reason as Marquee Text Scroll
+       above: the first row's own checkbox/select label already reads as
+       the section header. -->
   <div class="settings-section">
-    <p class="settings-section-title">Marquee Bulbs:</p>
     <div class="settings-section-rows">
-      <div class="control-row">
-        <label for="marqueeBulbMode">Marquee Bulbs:</label>
-        <select id="marqueeBulbMode" class="marquee-bulb-mode-select" aria-label="Which areas show the scrolling marquee light bulb ring">
-          <option value="off">Off</option>
-          <option value="all">All (Elements + Layout)</option>
-          <option value="elements">Elements Only</option>
-          <option value="layout">Layout Only</option>
-        </select>
-      </div>
-      <div class="settings-row-pair">
-        <div class="control-row control-row--slider">
-          <label for="marqueeBulbSize">Marquee Bulb Size:</label>
-          <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbSize" min="1.5" max="55" step="0.5" value="2.8" aria-label="Diameter of the scrolling marquee light bulbs" />
-          </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeBulbMode">Marquee Bulbs:</label>
+          <select id="marqueeBulbMode" class="marquee-bulb-mode-select" aria-label="Which areas show the scrolling marquee light bulb ring">
+            <option value="off">Off</option>
+            <option value="all">All (Elements + Layout)</option>
+            <option value="elements">Elements Only</option>
+            <option value="layout">Layout Only</option>
+          </select>
         </div>
-        <div class="control-row control-row--slider">
-          <label for="marqueeBulbGap">Marquee Bulb Gap:</label>
-          <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbGap" min="5" max="60" step="1" value="11" aria-label="Gap between one bulb and the next, in pixels, independent of Bulb Size" />
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeBulbSize">Marquee Bulb Size:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbSize" min="1.5" max="55" step="0.5" value="2.8" aria-label="Diameter of the scrolling marquee light bulbs" data-min-label="Small" data-max-label="Large" />
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="settings-row-pair">
-        <div class="control-row control-row--slider">
-          <label for="marqueeBulbSpeedElements">Marquee Bulb Speed (Elements):</label>
-          <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbSpeedElements" min="10" max="300" step="10" value="80" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" />
-          </div>
-        </div>
-        <div class="control-row control-row--slider">
-          <label for="marqueeBulbSpeedLayout">Marquee Bulb Speed (Layout):</label>
-          <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbSpeedLayout" min="10" max="300" step="10" value="80" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" />
+          <div class="feature-row-slider">
+            <label for="marqueeBulbGap">Marquee Bulb Gap:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbGap" min="5" max="60" step="1" value="11" aria-label="Gap between one bulb and the next, in pixels, independent of Bulb Size" data-min-label="Small" data-max-label="Large" />
+            </div>
           </div>
         </div>
       </div>
-      <div class="settings-row-pair">
-        <div class="control-row">
-          <label for="marqueeBulbScroll">Marquee Bulb Scroll:</label>
-          <input type="checkbox" id="marqueeBulbScroll" class="vs-checkbox" checked aria-label="Scroll the marquee light bulbs; turn off to leave them static in place" />
-        </div>
-        <div class="control-row">
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
           <label for="marqueeBulbFlicker">Marquee Bulb Flicker:</label>
           <input type="checkbox" id="marqueeBulbFlicker" class="vs-checkbox" aria-label="Flicker the marquee light bulbs like an old theater sign" />
         </div>
-      </div>
-      <div class="settings-row-pair">
-        <div class="control-row control-row--slider">
-          <label for="marqueeBulbFlickerIntensity">Marquee Bulb Flicker Intensity:</label>
-          <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0.6" aria-label="How deep the marquee bulb flicker dips" />
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeBulbFlickerIntensity">Marquee Bulb Flicker Intensity:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0.6" aria-label="How deep the marquee bulb flicker dips" />
+            </div>
           </div>
         </div>
-        <div class="control-row">
+      </div>
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="marqueeBulbScroll">Marquee Bulb Scroll:</label>
+          <input type="checkbox" id="marqueeBulbScroll" class="vs-checkbox" checked aria-label="Scroll the marquee light bulbs; turn off to leave them static in place" />
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="marqueeBulbSpeedElements">Marquee Bulb Speed (Elements):</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbSpeedElements" min="10" max="300" step="10" value="80" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
+            </div>
+          </div>
+          <div class="feature-row-slider">
+            <label for="marqueeBulbSpeedLayout">Marquee Bulb Speed (Layout):</label>
+            <div class="vs-slider-row">
+              <input type="range" id="marqueeBulbSpeedLayout" min="10" max="300" step="10" value="80" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Zero-slider checkbox — nothing to adjust here, so it sits at
+           the bottom of the section rather than a prominent position. -->
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
           <label for="marqueeBulbFlickerRandom">Marquee Bulb Flicker Random:</label>
           <input type="checkbox" id="marqueeBulbFlickerRandom" class="vs-checkbox" aria-label="Flicker every element's bulbs on its own random timing instead of all in sync; turning this off resyncs everyone to the same shared timing" />
         </div>
+        <div class="feature-row-sliders"></div>
       </div>
     </div>
   </div>
+  <!-- No section title here either — same reason as Marquee Text Scroll/
+       Marquee Bulbs above. -->
   <div class="settings-section">
-    <p class="settings-section-title">Confetti:</p>
     <div class="settings-section-rows">
-      <div class="control-row">
-        <label for="confettiEnabled">Confetti:</label>
-        <div class="font-picker-row">
+      <div class="control-row feature-row">
+        <div class="feature-row-toggle">
+          <label for="confettiEnabled">Confetti:</label>
           <!-- Fires the local canvas preview AND pushes a real one-shot
                song-ended event to the backend (see the click handler below),
                so a connected render.html/OBS Browser Source shows it too —
                with a guaranteed-perfect score so it always fires regardless
                of the configured Trigger At, matching "test" intent (a real
                song run is what actually exercises the real threshold). -->
-          <button class="load-fonts-btn" id="testConfettiBtn" type="button">Test Confetti</button>
           <input type="checkbox" id="confettiEnabled" class="vs-checkbox" checked />
+          <button class="load-fonts-btn" id="testConfettiBtn" type="button">Test Confetti</button>
+        </div>
+        <div class="feature-row-sliders">
+          <div class="feature-row-slider">
+            <label for="confettiVolume">Confetti Amount:</label>
+            <div class="vs-slider-row">
+              <input type="range" id="confettiVolume" min="0" max="1" step="0.05" value="0.1" aria-label="Confetti amount, light to screen-filling" data-min-label="Little" data-max-label="Lot" />
+            </div>
+          </div>
         </div>
       </div>
+      <!-- Steppers, not sliders — stay in their own row, not pulled into
+           the feature-row above (see .feature-row's own comment: only
+           type=range controls become a feature's dependents). -->
       <div class="settings-row-pair">
-        <div class="control-row">
+        <div class="control-row inline">
           <label for="confettiDuration">Confetti Duration:</label>
           <span class="fontsize-field">
             <button type="button" class="step-btn" id="confettiDurationMinus" aria-label="Decrease confetti duration">−</button>
             <input type="number" id="confettiDuration" min="1" max="20" step="0.5" value="7" aria-label="Confetti duration in seconds" />
             <button type="button" class="step-btn" id="confettiDurationPlus" aria-label="Increase confetti duration">+</button>
-            <span class="unit">s</span>
+            <span class="unit">sec</span>
           </span>
         </div>
-        <div class="control-row">
+        <div class="control-row inline">
           <label for="confettiTriggerAt">Confetti Trigger At:</label>
           <span class="fontsize-field">
             <button type="button" class="step-btn" id="confettiTriggerAtMinus" aria-label="Decrease confetti trigger percentage">−</button>
@@ -2178,12 +2643,6 @@
             <button type="button" class="step-btn" id="confettiTriggerAtPlus" aria-label="Increase confetti trigger percentage">+</button>
             <span class="unit">%</span>
           </span>
-        </div>
-      </div>
-      <div class="control-row control-row--slider">
-        <label for="confettiVolume">Confetti Amount:</label>
-        <div class="vs-slider-row">
-          <input type="range" id="confettiVolume" min="0" max="1" step="0.05" value="0.1" aria-label="Confetti amount, light to screen-filling" />
         </div>
       </div>
     </div>
@@ -2195,36 +2654,41 @@
        default; the tab-switch handler toggles which of
        globalSettingsTab/customizeSettingsTab is visible. -->
   <div id="customizeSettingsTab" role="tabpanel" style="display:none">
-    <div class="control-row inline">
-      <label for="customizeElementSelect">Element:</label>
-      <select id="customizeElementSelect" aria-label="Which element's settings to customize"></select>
-      <button class="load-fonts-btn" id="customizeResetBtn" type="button" title="Discard every custom value for this one element, back to Global">Reset to Global</button>
-    </div>
     <!-- The ONE flag deciding Global vs. this element's own values —
          every row below is disabled/mirrors Global while this is off,
          same "grayed out, showing what it'd inherit" treatment either
-         way, just gated once here instead of per row. -->
-    <div class="control-row">
+         way, just gated once here instead of per row. Pulled out of the
+         plain .control-row list into its own band (see CSS) — user
+         testing showed it read as just another setting and got skipped
+         past; the glow/tint only while OFF is added by
+         syncCustomizeEnableToggle(), not here, since this markup doesn't
+         know the current element's state. -->
+    <div class="customize-enable-band" id="customizeEnableBand">
       <label for="customizeEnableToggle">Enable Customizations:</label>
       <input type="checkbox" id="customizeEnableToggle" class="vs-checkbox" aria-label="Use this element's own custom settings instead of Global" />
     </div>
+    <div class="control-row inline">
+      <label for="customizeElementSelect">Select Element to Customize:</label>
+      <select id="customizeElementSelect" aria-label="Which element's settings to customize"></select>
+      <button class="load-fonts-btn" id="customizeResetBtn" type="button" title="Discard every custom value for this one element, back to Global">Reset to Global</button>
+    </div>
     <div id="customizeSettingsRows"></div>
   </div>
-  </div><div class="panel">
+  </div><div class="panel" id="elementsPanel" data-tab="elements" role="tabpanel" style="display:none">
   <p class="panel-title">Element settings: Re-order for layering, change header text, adjust font size, and toggle off the element:</p>
-  <div class="element-toggles" id="elementToggles"></div></div><div class="panel">
-  <p class="panel-title">Marquee Scroll Roll: add a banner element below, then assign other elements to it via their own "Marquee Roll" setting above to merge their text into one scrolling banner:</p>
-  <div class="add-custom-row">
-    <button class="load-fonts-btn" id="addRoll" type="button">Add Marquee Roll</button>
-  </div>
-  <div class="custom-text-list" id="rollList"></div></div><div class="panel">
+  <div class="element-toggles" id="elementToggles"></div>
   <p class="panel-title">Add your own custom text below</p>
   <div class="add-custom-row">
     <label for="customTextInput">New Text Element:</label>
     <input type="text" class="text-input" id="customTextInput" placeholder="e.g. Follow on Twitch!" />
     <button class="load-fonts-btn" id="addCustomText" type="button">Add</button>
   </div>
-  <div class="custom-text-list" id="customTextList"></div></div><div class="panel">
+  <div class="custom-text-list" id="customTextList"></div>
+  <p class="panel-title">Marquee Scroll Roll: add a banner element below, then assign other elements to it via their own "Marquee Roll" setting above to merge their text into one scrolling banner:</p>
+  <div class="add-custom-row">
+    <button class="load-fonts-btn" id="addRoll" type="button">Add Marquee Roll</button>
+  </div>
+  <div class="custom-text-list" id="rollList"></div></div><div class="panel" id="importExportPanel" data-tab="importexport" role="tabpanel" style="display:none">
   <p class="panel-title">Import/Export Your Settings Using a .json or With Copy/Paste:</p>
   <div class="control-row inline">
     <label>Export Layout Settings:</label>
@@ -2403,28 +2867,62 @@
   // intensity) are independently overridden; on gives this ONE element
   // its own freshly-randomized phase without pulling every other
   // element into random mode too (see setBulbLoop's own comment).
+  // `section`/`dependents`/`mainToggle` are UI-only grouping metadata for
+  // the Customize tab (see renderCustomizeSettingRows/renderFeatureRow/
+  // CUSTOMIZE_SECTION_ORDER) — matches the Global tab's own hand-authored
+  // section titles and feature-row groupings exactly, so the two tabs
+  // sort settings into the same feature groups the same way. Editor-only,
+  // like `label`: render.html's copy of this array stays output-only and
+  // never needs any of them.
+  //   - `dependents`: only on checkboxes that are a "feature" — an array
+  //     of sibling range-slider keys that render stacked to its right
+  //     instead of as their own row. `[]` still marks a 0-slider feature
+  //     (empty right side); no `dependents` field at all means a plain
+  //     row, untouched by the feature-row reorg.
+  //   - `mainToggle`: the one dependents-bearing checkbox per section
+  //     whose name matches the section — pinned first, before the rest
+  //     of that section's feature checkboxes sort alphabetically.
+  //   - `minLabel`/`maxLabel`: only on `type: 'range'` entries — a word
+  //     (Slow/Fast, Small/Large, ...) shown instead of the raw numeric
+  //     bound, set on the generated input as data-min-label/data-max-label
+  //     for enhanceSlider to read (see its own comment). Omit both to
+  //     leave a slider showing plain numbers — not every slider reads
+  //     better as a word (opacity/transparency, Flicker Intensity).
   const OVERRIDABLE_SETTINGS = [
-    { key: 'chipColor', label: 'Element Color/Transparency', type: 'coloralpha', alphaKey: 'chipAlpha' },
-    { key: 'accent', label: 'Accent Color', type: 'color' },
-    { key: 'bold', label: 'Bold Text', type: 'checkbox' },
-    { key: 'font', label: 'Element Font', type: 'font' },
-    { key: 'borderWidth', label: 'Border Thickness', type: 'range', min: 0, max: 6, step: 1 },
-    { key: 'edgeRounding', label: 'Edge Rounding', type: 'range', min: 0, max: 20, step: 1 },
-    { key: 'elementHeadSize', label: 'Element Header Text Size', type: 'range', min: 6, max: 160, step: 1 },
-    { key: 'marqueeScroll', label: 'Marquee Scroll', type: 'checkbox' },
-    { key: 'marqueeScrollSpeed', label: 'Marquee Scroll Speed', type: 'range', min: 10, max: 300, step: 10 },
-    { key: 'marqueeEdgeFade', label: 'Marquee Edge Fade', type: 'checkbox' },
-    { key: 'marqueeSparkle', label: 'Marquee Stars', type: 'checkbox' },
-    { key: 'marqueeSparkleSize', label: 'Marquee Star Size', type: 'range', min: 4, max: 64, step: 1 },
-    { key: 'marqueeBulbs', label: 'Marquee Bulbs', type: 'checkbox' },
-    { key: 'marqueeBulbSize', label: 'Marquee Bulb Size', type: 'range', min: 1.5, max: 55, step: 0.5 },
-    { key: 'marqueeBulbGap', label: 'Marquee Bulb Gap', type: 'range', min: 5, max: 60, step: 1 },
-    { key: 'marqueeBulbSpeedElements', label: 'Marquee Bulb Speed', type: 'range', min: 10, max: 300, step: 10 },
-    { key: 'marqueeBulbScroll', label: 'Marquee Bulb Scroll', type: 'checkbox' },
-    { key: 'marqueeBulbFlicker', label: 'Marquee Bulb Flicker', type: 'checkbox' },
-    { key: 'marqueeBulbFlickerIntensity', label: 'Marquee Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05 },
-    { key: 'marqueeBulbFlickerRandom', label: 'Marquee Bulb Flicker Random', type: 'checkbox' },
+    { key: 'chipColor', label: 'Element Color/Transparency', type: 'coloralpha', alphaKey: 'chipAlpha', section: 'Color & Type' },
+    { key: 'accent', label: 'Accent Color', type: 'color', section: 'Color & Type' },
+    { key: 'bold', label: 'Bold Text', type: 'checkbox', section: 'Color & Type', dependents: [] },
+    { key: 'font', label: 'Element Font', type: 'font', section: 'Color & Type' },
+    { key: 'borderWidth', label: 'Border Thickness', type: 'range', min: 0, max: 6, step: 1, section: 'Layout & Canvas', minLabel: 'None', maxLabel: 'Thick' },
+    { key: 'edgeRounding', label: 'Edge Rounding', type: 'range', min: 0, max: 20, step: 1, section: 'Layout & Canvas', minLabel: 'None', maxLabel: 'Rounded' },
+    { key: 'elementHeadSize', label: 'Element Header Text Size', type: 'range', min: 6, max: 160, step: 1, section: 'Layout & Canvas', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeScroll', label: 'Marquee Text Scroll', type: 'checkbox', section: 'Marquee Text Scroll', dependents: ['marqueeScrollSpeed'], mainToggle: true },
+    { key: 'marqueeScrollSpeed', label: 'Marquee Scroll Speed', type: 'range', min: 10, max: 300, step: 10, section: 'Marquee Text Scroll', minLabel: 'Slow', maxLabel: 'Fast' },
+    { key: 'marqueeEdgeFade', label: 'Marquee Edge Fade', type: 'checkbox', section: 'Marquee Text Scroll', dependents: [] },
+    { key: 'marqueeSparkle', label: 'Marquee Stars', type: 'checkbox', section: 'Marquee Text Scroll', dependents: ['marqueeSparkleSize'] },
+    { key: 'marqueeSparkleSize', label: 'Marquee Star Size', type: 'range', min: 4, max: 64, step: 1, section: 'Marquee Text Scroll', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeBulbs', label: 'Marquee Bulbs', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSize', 'marqueeBulbGap'], mainToggle: true },
+    { key: 'marqueeBulbSize', label: 'Marquee Bulb Size', type: 'range', min: 1.5, max: 55, step: 0.5, section: 'Marquee Bulbs', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeBulbGap', label: 'Marquee Bulb Gap', type: 'range', min: 5, max: 60, step: 1, section: 'Marquee Bulbs', minLabel: 'Small', maxLabel: 'Large' },
+    { key: 'marqueeBulbSpeedElements', label: 'Marquee Bulb Speed', type: 'range', min: 10, max: 300, step: 10, section: 'Marquee Bulbs', minLabel: 'Slow', maxLabel: 'Fast' },
+    { key: 'marqueeBulbScroll', label: 'Marquee Bulb Scroll', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSpeedElements'] },
+    { key: 'marqueeBulbFlicker', label: 'Marquee Bulb Flicker', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbFlickerIntensity'] },
+    { key: 'marqueeBulbFlickerIntensity', label: 'Marquee Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05, section: 'Marquee Bulbs' },
+    { key: 'marqueeBulbFlickerRandom', label: 'Marquee Bulb Flicker Random', type: 'checkbox', section: 'Marquee Bulbs', dependents: [] },
   ];
+  // Display order for the Customize tab's sections — deliberately listed
+  // here rather than inferred from OVERRIDABLE_SETTINGS' own array order
+  // (which is Color & Type first) so it can match the Global tab's actual
+  // on-screen section order (Layout & Canvas first) regardless of the
+  // array's own order.
+  const CUSTOMIZE_SECTION_ORDER = ['Layout & Canvas', 'Color & Type', 'Marquee Text Scroll', 'Marquee Bulbs'];
+  // Sections whose own .settings-section-title is skipped because the
+  // first row's checkbox label already repeats the exact same text — see
+  // renderCustomizeSettingRows' own comment at the call site. (Confetti
+  // has the same duplicate-name situation on the Global tab but isn't
+  // per-element overridable, so it has no Customize-tab counterpart to
+  // list here.)
+  const NO_SECTION_TITLE = new Set(['Marquee Text Scroll', 'Marquee Bulbs']);
   // What a key falls back to when this element ISN'T customized (or
   // customized but that particular key was added to OVERRIDABLE_SETTINGS
   // after this element last had customization enabled) — global, except
@@ -2443,8 +2941,19 @@
     const useCustom = !!(layout[id] && layout[id].useCustomStyles);
     const ov = (useCustom && layout[id].styleOverrides) || {};
     const eff = {};
-    OVERRIDABLE_SETTINGS.forEach(({ key }) => {
+    OVERRIDABLE_SETTINGS.forEach(({ key, alphaKey }) => {
       eff[key] = Object.prototype.hasOwnProperty.call(ov, key) ? ov[key] : globalFallbackFor(key);
+      // coloralpha rows (currently just chipColor/chipAlpha) store their
+      // alpha under a SEPARATE key from `key` itself — without this, eff
+      // never gets that key at all, so buildCustomizeControl's alpha
+      // slider reads eff[alphaKey] as undefined on every rebuild (leaving
+      // the Customize tab, switching elements, ...) and a range input
+      // silently falls back to its min/max midpoint (0.5 for 0-1) when
+      // given an unparseable value — even though the real stored value in
+      // styleOverrides was never actually lost.
+      if (alphaKey) {
+        eff[alphaKey] = Object.prototype.hasOwnProperty.call(ov, alphaKey) ? ov[alphaKey] : globalFallbackFor(alphaKey);
+      }
     });
     return eff;
   }
@@ -2525,8 +3034,15 @@
     layout[id].useCustomStyles = true;
     if (!layout[id].styleOverrides) layout[id].styleOverrides = {};
     const ov = layout[id].styleOverrides;
-    OVERRIDABLE_SETTINGS.forEach(({ key }) => {
+    OVERRIDABLE_SETTINGS.forEach(({ key, alphaKey }) => {
       if (!(key in ov)) ov[key] = globalFallbackFor(key);
+      // Same gap as getEffectiveVisualsFor's own alphaKey fix — without
+      // this, a freshly-enabled element never gets a seeded chipAlpha at
+      // all, so applyElementStyleOverrides' `typeof ov.chipAlpha ===
+      // 'number' ? ov.chipAlpha : 1` fallback silently starts it fully
+      // OPAQUE regardless of what Global's transparency was actually set
+      // to, until the alpha slider happens to get touched once.
+      if (alphaKey && !(alphaKey in ov)) ov[alphaKey] = globalFallbackFor(alphaKey);
     });
     if ('accent' in ov) ov.accentRgb = hexToRgbChannels(ov.accent);
     if ('chipColor' in ov) ov.chipRgb = hexToRgbChannels(ov.chipColor);
@@ -3175,6 +3691,151 @@
     marqueeBulbFlickerRandom: false,
     fadeSeconds: 5,
   };
+  // Crafty Girls' own hand-tuned default — first preset to both bake in a
+  // Marquee Roll (roll-1, cycling Tuning/Year/Path via rollGroup/rollSlot)
+  // AND use per-element Customize overrides (see nowplaying/score/progress/
+  // art/roll-1's styleOverrides) as part of its DEFAULT, not just something a
+  // user added after loading it. Key order below is deliberate — order
+  // below every OTHER preset uses is Object.keys(thisLayout) (see the
+  // PRESETS.CraftyGirls block below), and roll-1 needs to be first for it
+  // to get the highest z-index (see applyOrder's own comment) same as it
+  // was in the editor session this was captured from.
+  const craftyGirlsDefaultLayout = {
+    'roll-1': {
+      x: 33.46153846153846, y: 28.000000000000004,
+      width: 202.7109375, height: 47.40625, fontSize: 20, visible: true,
+      isRoll: true, name: 'Marquee Roll 1',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: true, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 10,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
+        marqueeBulbSpeedElements: 80, marqueeBulbScroll: true,
+        marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0.6, marqueeBulbFlickerRandom: false,
+        accentRgb: '224 86 140', chipRgb: '0 0 0', chipAlpha: 0,
+      },
+    },
+    nowplaying: {
+      x: 43.13099787785457, y: 0,
+      width: 101.0521240234375, height: 20, fontSize: 16, visible: true,
+      name: 'Now Playing',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: false, marqueeScrollSpeed: 80, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 10,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
+        marqueeBulbSpeedElements: 80, marqueeBulbScroll: true,
+        marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0.6, marqueeBulbFlickerRandom: false,
+        accentRgb: '224 86 140', chipRgb: '0 0 0', chipAlpha: 0,
+      },
+    },
+    tuning: {
+      x: 33.46253908597506, y: 29.703125000000004,
+      width: 78.46353149414062, height: 45.00000762939453, fontSize: 16, visible: true,
+      name: 'Tuning', rollGroup: 'roll-1', rollSlot: 1,
+    },
+    year: {
+      x: 48.55143326979417, y: 29.700519561767578,
+      width: 47.833343505859375, height: 45, fontSize: 16, visible: true,
+      name: 'Year', rollGroup: 'roll-1', rollSlot: 1,
+    },
+    path: {
+      x: 57.74989788348858, y: 29.700523376464844,
+      width: 76.41535949707031, height: 45, fontSize: 16, visible: true,
+      name: 'Path', rollGroup: 'roll-1', rollSlot: 1,
+    },
+    score: {
+      x: 72.44491577148438, y: 0,
+      width: 143.2864227294922, height: 104.40625, fontSize: 25, visible: true,
+      name: 'Score',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 17,
+        marqueeScroll: false, marqueeScrollSpeed: 30, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 10,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
+        marqueeBulbSpeedElements: 80, marqueeBulbScroll: true,
+        marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0.6, marqueeBulbFlickerRandom: false,
+        accentRgb: '224 86 140', chipRgb: '0 0 0', chipAlpha: 0,
+      },
+    },
+    info: {
+      x: 33.46153846153846, y: 51.70312500000001,
+      width: 345.98960876464844, height: 70.59375, fontSize: 20, visible: true,
+      name: 'Song Title & Artist',
+    },
+    progress: {
+      x: 0, y: 87,
+      width: 519.9947967529297, height: 26, fontSize: 20, visible: true,
+      name: 'Song Time',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 10,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
+        marqueeBulbSpeedElements: 80, marqueeBulbScroll: true,
+        marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0.6, marqueeBulbFlickerRandom: false,
+        accentRgb: '224 86 140', chipRgb: '0 0 0', chipAlpha: 0,
+      },
+    },
+    art: {
+      x: 0, y: 0, scale: 2.07142855844609, visible: true, name: 'Album Art',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#e0568c', bold: false, font: 'Crafty Girls',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: true, marqueeScrollSpeed: 30, marqueeEdgeFade: true,
+        marqueeSparkle: false, marqueeSparkleSize: 10,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
+        marqueeBulbSpeedElements: 80, marqueeBulbScroll: true,
+        marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0.6, marqueeBulbFlickerRandom: false,
+        accentRgb: '224 86 140', chipRgb: '0 0 0',
+      },
+    },
+  };
+  const craftyGirlsDefaultVisuals = {
+    accent: '#e0568c',
+    accentRgb: '224 86 140',
+    chipColor: '#000000',
+    chipRgb: '0 0 0',
+    chipAlpha: 0,
+    borderWidth: 1,
+    bold: false,
+    font: 'Crafty Girls',
+    stageWidth: 520,
+    stageHeight: 200,
+    canvasBgColor: '#000000',
+    canvasBgRgb: '0 0 0',
+    canvasBgAlpha: 1,
+    elementHeadSize: 10,
+    edgeRounding: 0,
+    confettiEnabled: true,
+    confettiDuration: 7,
+    confettiVolume: 0.1,
+    confettiTriggerAt: 100,
+    marqueeScroll: true,
+    marqueeScrollSpeed: 30,
+    marqueeEdgeFade: true,
+    marqueeSparkle: false,
+    marqueeSparkleSize: 10,
+    marqueeBulbMode: 'off',
+    marqueeBulbSize: 2.8,
+    marqueeBulbGap: 11,
+    marqueeBulbSpeedElements: 80,
+    marqueeBulbSpeedLayout: 80,
+    marqueeBulbScroll: true,
+    marqueeBulbFlicker: false,
+    marqueeBulbFlickerIntensity: 0.6,
+    marqueeBulbFlickerRandom: false,
+    fadeSeconds: 10,
+  };
   const PRESETS = {};
   {
     const def = makePresetSnapshot();
@@ -3235,6 +3896,14 @@
       order: Object.keys(rocksnifferV4DefaultLayout),
     };
     PRESETS.Rocksniffer = { default: v4Def, current: clonePresetSnapshot(v4Def) };
+  }
+  {
+    const craftyGirlsDef = {
+      layout: JSON.parse(JSON.stringify(craftyGirlsDefaultLayout)),
+      visuals: JSON.parse(JSON.stringify(craftyGirlsDefaultVisuals)),
+      order: Object.keys(craftyGirlsDefaultLayout),
+    };
+    PRESETS.CraftyGirls = { default: craftyGirlsDef, current: clonePresetSnapshot(craftyGirlsDef) };
   }
   const presetSelect = document.getElementById('presetSelect');
   // Tracks which preset was selected before a 'change' event, so switching
@@ -5576,22 +6245,19 @@
         field.append(rollSelect, slotInput);
         row.appendChild(field);
       }
-      const sw = document.createElement('span');
-      sw.className = 'switch';
+      // .vs-checkbox is a native input styled directly (see its CSS) — no
+      // wrapper span needed, unlike the .switch pill it replaces here,
+      // same swap already done for buildCustomizeControl's checkbox branch.
       const input = document.createElement('input');
       input.type = 'checkbox';
+      input.className = 'vs-checkbox';
       input.checked = layout[id] ? layout[id].visible !== false : true;
-      const track = document.createElement('span');
-      track.className = 'track';
-      const thumb = document.createElement('span');
-      thumb.className = 'thumb';
-      sw.append(input, track, thumb);
       input.addEventListener('change', () => {
         if (!layout[id]) return;
         layout[id].visible = input.checked;
         applyLayout();
       });
-      row.appendChild(sw);
+      row.appendChild(input);
       container.appendChild(row);
     });
     // Elements list is the canonical source of "what elements currently
@@ -5645,6 +6311,12 @@
     if (!select || !toggle) return;
     const id = select.value;
     toggle.checked = !!(layout[id] && layout[id].useCustomStyles);
+    // Single source of truth for the band's glow, driven off the
+    // checkbox's own resolved state rather than duplicated at each of
+    // this function's three call sites (tab switch, element switch,
+    // Reset to Global) plus the toggle's own change handler.
+    const band = document.getElementById('customizeEnableBand');
+    if (band) band.classList.toggle('needs-attention', !toggle.checked);
   }
   // Builds just the CONTROL half of one row (not its label) — the
   // control always shows the element's current EFFECTIVE value (its own
@@ -5665,6 +6337,12 @@
       colorInput.disabled = !useCustom;
       const alphaKey = setting.alphaKey;
       const alphaInput = document.createElement('input');
+      // Gives the row's <label> something to point 'for' at — see
+      // renderCustomizeSettingRows, which uses alphaKey over key for
+      // exactly this type so the label activates the slider, not the
+      // (arguably less "primary") color swatch — same convention the
+      // Global tab already uses for its own color+range combo rows.
+      alphaInput.id = 'customize-' + alphaKey;
       alphaInput.type = 'range';
       alphaInput.min = '0';
       alphaInput.max = '1';
@@ -5682,6 +6360,7 @@
     }
     if (setting.type === 'color') {
       const input = document.createElement('input');
+      input.id = 'customize-' + key;
       input.type = 'color';
       input.className = 'color-input';
       input.value = eff[key];
@@ -5697,6 +6376,13 @@
       // so :disabled dimming is just the browser's own state, no manual
       // is-disabled class to keep in sync.
       const input = document.createElement('input');
+      // The id + renderCustomizeSettingRows' matching label.htmlFor is
+      // what makes clicking the row's TEXT (not just the tiny checkbox
+      // square itself) toggle it — native <label for> behavior, same as
+      // every Global tab checkbox already gets for free from its
+      // hand-written <label for="...">. Without an id here there's
+      // nothing for the label to point at.
+      input.id = 'customize-' + key;
       input.type = 'checkbox';
       input.className = 'vs-checkbox';
       input.checked = !!eff[key];
@@ -5708,6 +6394,7 @@
     }
     if (setting.type === 'font') {
       const select = document.createElement('select');
+      select.id = 'customize-' + key;
       // Mirrors whatever the global font picker currently offers
       // (fallback list, or the real system list once Load System Fonts
       // has been used) — same source, not a second independent list.
@@ -5732,12 +6419,19 @@
     }
     // range
     const input = document.createElement('input');
+    input.id = 'customize-' + key;
     input.type = 'range';
     input.min = String(setting.min);
     input.max = String(setting.max);
     input.step = String(setting.step);
     input.value = String(eff[key]);
     input.disabled = !useCustom;
+    // Descriptive min/max words (Slow/Fast, Small/Large, ...) — see
+    // enhanceSlider's own comment. Only set when the setting declares
+    // them; sliders without minLabel/maxLabel (opacity/transparency,
+    // Flicker Intensity) fall back to enhanceSlider's plain-number default.
+    if (setting.minLabel) input.dataset.minLabel = setting.minLabel;
+    if (setting.maxLabel) input.dataset.maxLabel = setting.maxLabel;
     input.addEventListener('input', () => {
       if (layout[id] && layout[id].useCustomStyles) setElementOverrideValue(id, key, parseFloat(input.value));
     });
@@ -5747,6 +6441,60 @@
   // is cheap enough that a fresh build on every selection/value change
   // is simpler and less error-prone than tracking which single row
   // needs updating.
+  // One plain (non-feature) setting row — label left, its control right.
+  // Unchanged from before the feature-row reorg, just extracted so
+  // renderCustomizeSettingRows can call it for plain rows only.
+  function renderCustomizePlainRow(id, setting, useCustom) {
+    const row = document.createElement('div');
+    row.className = 'control-row customize-setting-row' + (useCustom ? '' : ' is-disabled');
+    const label = document.createElement('label');
+    label.textContent = setting.label + ':';
+    // alphaKey over key for coloralpha rows — see buildCustomizeControl's
+    // own comment on alphaInput.id for why.
+    label.htmlFor = 'customize-' + (setting.alphaKey || setting.key);
+    const controlCell = document.createElement('span');
+    controlCell.className = 'control-cell';
+    controlCell.appendChild(buildCustomizeControl(id, setting, useCustom));
+    row.append(label, controlCell);
+    return row;
+  }
+  // A feature row — the checkbox (or, for Marquee Bulbs, its mode select)
+  // on the left, its dependent slider(s) stacked on the right, matching
+  // the Global tab's own .feature-row markup exactly (see that CSS
+  // comment). `dependentSettings` is already resolved from `setting`'s
+  // own `dependents` key list.
+  function renderCustomizeFeatureRow(id, setting, dependentSettings, useCustom) {
+    const row = document.createElement('div');
+    row.className = 'control-row customize-setting-row feature-row' + (useCustom ? '' : ' is-disabled');
+    const toggle = document.createElement('div');
+    toggle.className = 'feature-row-toggle';
+    const toggleLabel = document.createElement('label');
+    toggleLabel.textContent = setting.label + ':';
+    toggleLabel.htmlFor = 'customize-' + setting.key;
+    toggle.append(toggleLabel, buildCustomizeControl(id, setting, useCustom));
+    const sliders = document.createElement('div');
+    sliders.className = 'feature-row-sliders';
+    dependentSettings.forEach((dep) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'feature-row-slider';
+      const depLabel = document.createElement('label');
+      depLabel.textContent = dep.label + ':';
+      depLabel.htmlFor = 'customize-' + dep.key;
+      // buildCustomizeControl's range branch returns a bare <input> — it
+      // needs a .vs-slider-row wrapper (a flex row) for enhanceSlider's
+      // inserted min/max/value spans to lay out horizontally, same as
+      // every Global-tab slider already does; .feature-row-slider itself
+      // is a column flex (label above), so without this inner row the
+      // spans stack vertically instead.
+      const sliderRow = document.createElement('div');
+      sliderRow.className = 'vs-slider-row';
+      sliderRow.appendChild(buildCustomizeControl(id, dep, useCustom));
+      wrap.append(depLabel, sliderRow);
+      sliders.appendChild(wrap);
+    });
+    row.append(toggle, sliders);
+    return row;
+  }
   function renderCustomizeSettingRows() {
     const select = document.getElementById('customizeElementSelect');
     const container = document.getElementById('customizeSettingsRows');
@@ -5755,16 +6503,73 @@
     container.innerHTML = '';
     if (!id || !layout[id]) return;
     const useCustom = !!layout[id].useCustomStyles;
-    OVERRIDABLE_SETTINGS.forEach((setting) => {
-      const row = document.createElement('div');
-      row.className = 'control-row customize-setting-row';
-      const label = document.createElement('label');
-      label.textContent = setting.label + ':';
-      const controlCell = document.createElement('span');
-      controlCell.className = 'control-cell';
-      controlCell.appendChild(buildCustomizeControl(id, setting, useCustom));
-      row.append(label, controlCell);
-      container.appendChild(row);
+    const byKey = {};
+    OVERRIDABLE_SETTINGS.forEach((s) => { byKey[s.key] = s; });
+    // Keys that are some feature's dependent slider render inside that
+    // feature's row, not as their own — see the `dependents` comment on
+    // OVERRIDABLE_SETTINGS.
+    const consumedKeys = new Set();
+    OVERRIDABLE_SETTINGS.forEach((s) => { (s.dependents || []).forEach((k) => consumedKeys.add(k)); });
+    // Grouped into the same titled .settings-section cards as the Global
+    // tab (see CUSTOMIZE_SECTION_ORDER) instead of one flat list — each
+    // setting already declares which section it belongs to right in
+    // OVERRIDABLE_SETTINGS, so this just buckets by that field in the
+    // Global tab's own section order.
+    CUSTOMIZE_SECTION_ORDER.forEach((sectionName) => {
+      const settingsInSection = OVERRIDABLE_SETTINGS.filter((s) => s.section === sectionName && !consumedKeys.has(s.key));
+      if (!settingsInSection.length) return;
+      const section = document.createElement('div');
+      section.className = 'settings-section';
+      const rows = document.createElement('div');
+      rows.className = 'settings-section-rows';
+      // Feature checkboxes with at least one slider get reordered among
+      // themselves — the section's own main toggle pinned first, the rest
+      // alphabetical by label — and stay interleaved with the plain rows
+      // at their original OVERRIDABLE_SETTINGS position (see the main
+      // loop below, which only substitutes the next SORTED with-slider
+      // feature into each with-slider slot, leaving every plain row
+      // exactly where it already was). Zero-slider checkboxes are pulled
+      // out of that interleaved sequence entirely and rendered together,
+      // sorted the same way, at the very bottom of the section — nothing
+      // to adjust means nothing worth a prominent position.
+      const sortByMainThenAlpha = (a, b) => {
+        if (a.mainToggle) return -1;
+        if (b.mainToggle) return 1;
+        return a.label.localeCompare(b.label);
+      };
+      const sortedWithSliders = settingsInSection
+        .filter((s) => s.dependents && s.dependents.length > 0)
+        .slice()
+        .sort(sortByMainThenAlpha);
+      const sortedWithoutSliders = settingsInSection
+        .filter((s) => s.dependents && s.dependents.length === 0)
+        .slice()
+        .sort(sortByMainThenAlpha);
+      let sliderFeatureCursor = 0;
+      settingsInSection.forEach((setting) => {
+        if (setting.dependents && setting.dependents.length > 0) {
+          const featureSetting = sortedWithSliders[sliderFeatureCursor++];
+          const dependentSettings = featureSetting.dependents.map((k) => byKey[k]);
+          rows.appendChild(renderCustomizeFeatureRow(id, featureSetting, dependentSettings, useCustom));
+        } else if (!setting.dependents) {
+          rows.appendChild(renderCustomizePlainRow(id, setting, useCustom));
+        }
+        // Zero-slider features are skipped here — rendered below instead.
+      });
+      sortedWithoutSliders.forEach((setting) => {
+        rows.appendChild(renderCustomizeFeatureRow(id, setting, [], useCustom));
+      });
+      // No title on sections in NO_SECTION_TITLE — see the identical
+      // exception on the Global tab's HTML for why (the first row's own
+      // checkbox label already reads as the section header).
+      if (!NO_SECTION_TITLE.has(sectionName)) {
+        const title = document.createElement('p');
+        title.className = 'settings-section-title';
+        title.textContent = sectionName + ':';
+        section.appendChild(title);
+      }
+      section.appendChild(rows);
+      container.appendChild(section);
     });
     // Full rebuild above means fresh <input type=range> elements every
     // time — enhanceSlider() no-ops harmlessly on anything already
@@ -6042,10 +6847,13 @@
   // Inverted from the checkbox's raw state on purpose: this is a "Lock
   // Layout" toggle now, not "Edit Layout" — checked means LOCKED, so
   // editMode is the opposite of checked. Unchecked (default) = unlocked =
-  // editable, matching editMode's own default of true above.
+  // editable, matching editMode's own default of true above. Label flips
+  // "Lock Layout:"/"Unlock Layout:" the same way Zoom's own label does
+  // below — describes what clicking it does next, not its current state.
   editModeInput.addEventListener('change', (e) => {
     editMode = !e.target.checked;
     stage.classList.toggle('editing', editMode);
+    document.getElementById('lockLayoutLabel').textContent = e.target.checked ? 'Unlock Layout:' : 'Lock Layout:';
   });
   // Editing-view zoom only — see the ZOOM_SCALE/zoomedIn comment above.
   // Purely visual: doesn't touch layout, visuals, or anything exported.
@@ -6202,12 +7010,19 @@
   function enhanceSlider(input) {
     if (input.dataset.vsEnhanced) { syncSliderFill(input); return; }
     input.dataset.vsEnhanced = '1';
+    // Descriptive words (Slow/Fast, Small/Large, Little/Lot, ...) read
+    // better than a raw bound most players have no context for — set via
+    // data-min-label/data-max-label (Global tab HTML) or setting.minLabel/
+    // maxLabel (Customize tab, see buildCustomizeControl's range branch).
+    // Falls back to the plain numeric bound when neither is set — a
+    // handful of sliders (opacity/transparency, Flicker Intensity) are
+    // deliberately left as plain numbers, not every slider needs a word.
     const min = document.createElement('span');
     min.className = 'vs-slider-min';
-    min.textContent = input.min;
+    min.textContent = input.dataset.minLabel || input.min;
     const max = document.createElement('span');
     max.className = 'vs-slider-max';
-    max.textContent = input.max;
+    max.textContent = input.dataset.maxLabel || input.max;
     const value = document.createElement('span');
     value.className = 'vs-slider-value';
     input.insertAdjacentElement('beforebegin', min);
@@ -6549,6 +7364,31 @@
     syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
   });
+  // Outer tab bar (Visual Settings / Elements / Marquee Roll / Custom
+  // Text / Import-Export) — one level up from the Global/Customize
+  // handler just above, generalized to N data-driven tabs instead of 2
+  // fixed ones. Only ever touches the 5 top-level .panel[data-tab]
+  // elements' own display and the .panel-tab buttons' own state, never
+  // globalSettingsTab/customizeSettingsTab — so switching outer tabs away
+  // from and back to Visual Settings leaves whichever inner tab (Global/
+  // Customize) was last selected untouched. No init call needed: the
+  // HTML already encodes the correct initial state (Visual Settings
+  // visible, others display:none, first button .active).
+  const panelTabButtons = document.querySelectorAll('.panel-tab');
+  const outerPanels = document.querySelectorAll('.panel[data-tab]');
+  function switchPanelTab(name) {
+    panelTabButtons.forEach((btn) => {
+      const active = document.getElementById(btn.getAttribute('aria-controls')).dataset.tab === name;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    outerPanels.forEach((p) => { p.style.display = p.dataset.tab === name ? '' : 'none'; });
+  }
+  panelTabButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      switchPanelTab(document.getElementById(btn.getAttribute('aria-controls')).dataset.tab);
+    });
+  });
   // The ONE flag for whichever element is currently selected — see
   // OVERRIDABLE_SETTINGS' own comment for why this replaced a per-row
   // toggle.
@@ -6560,6 +7400,7 @@
     } else {
       disableElementCustomization(id);
     }
+    syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
   });
   document.getElementById('customizeResetBtn').addEventListener('click', () => {
@@ -6864,6 +7705,44 @@
       if (elapsed >= totalSeconds) clearInterval(timer);
     }, 1000);
   }
+  // TEST ONLY, same category as startTestTimer's fake clock above — Score
+  // has no live feed in this workspace either (see the confetti-trigger
+  // comment higher up), so this fakes continuous 0%->100%->0% motion,
+  // forever, purely so Score-driven visuals have something to react to
+  // while the editor just sits open. Never touches .stat-value-prev (the
+  // "Prev 87.95%" figure below it) — separate static placeholder, not
+  // part of this loop. requestAnimationFrame, not setInterval — a real
+  // scoring counter visibly climbs through hundredths (87.93%, 87.94%,
+  // 87.95%...), not in visible whole-percent jumps, and that only reads
+  // right at frame rate; the lastText guard skips the DOM write (and
+  // setupTicker's real measurement work) on the rare frame that rounds to
+  // a hundredth already shown.
+  function startTestScoreLoop() {
+    const track = document.querySelector('#obj-score .stat-value-percent .ticker-track');
+    if (!track) return;
+    const UP_MS = 10000, HOLD_MS = 5000, DOWN_MS = 10000;
+    const CYCLE_MS = UP_MS + HOLD_MS + DOWN_MS + HOLD_MS;
+    const start = performance.now();
+    let lastText = '';
+    function tick(now) {
+      const t = (now - start) % CYCLE_MS;
+      let pct;
+      if (t < UP_MS) pct = (t / UP_MS) * 100;
+      else if (t < UP_MS + HOLD_MS) pct = 100;
+      else if (t < UP_MS + HOLD_MS + DOWN_MS) pct = 100 - ((t - UP_MS - HOLD_MS) / DOWN_MS) * 100;
+      else pct = 0;
+      // The 100% rule: a perfect score reads as "100%", never "100.00%" —
+      // only 100 itself drops the decimals, every other reading keeps them.
+      const text = (pct === 100 ? '100' : pct.toFixed(2)) + '%';
+      if (text !== lastText) {
+        lastText = text;
+        track.textContent = text;
+        setupTicker(track.closest('.ticker'));
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
   // ============================================================
   // 8. Boot — the single, complete initial-render sequence. Every
   // call here is idempotent and safe to re-run; nothing else in
@@ -6881,7 +7760,8 @@
   rebuildElementToggles();
   rebuildCustomTextList();
   rebuildRollList();
-  startTestTimer();</script><!--
+  startTestTimer();
+  startTestScoreLoop();</script><!--
   Plugin integration (not part of the standalone design tool — this file is
   a copy of that tool's source with ONLY this block added).
   Loads/saves the live layout via this plugin's backend instead of the
