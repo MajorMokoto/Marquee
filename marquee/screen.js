@@ -10,7 +10,8 @@
 // folder for what was checked and how):
 //   - song:loaded gives currentSong {filename, title, artist, duration,
 //     arrangement, arrangementSmartName, arrangementIndex, tuning, ...} —
-//     no `year`; that comes from GET /api/song/{filename} (library metadata).
+//     no `year` or `album`; both come from GET /api/song/{filename}
+//     (library metadata).
 //   - song:position-changed does NOT reliably fire — confirmed live (CDP,
 //     real playback) that it never fires at all for stems-based songs, so
 //     live position comes from polling window.highway.getTime() instead
@@ -165,10 +166,17 @@
             ? `/api/song/${encodeURIComponent(currentSong.filename)}/art`
             : null;
 
+        // Album — like `year`, not in the live song:loaded payload, only in
+        // the library metadata fetch (GET /api/song/{filename}; see
+        // lib/scan_worker.py's _extract_meta_for_file, which always
+        // includes an "album" key — "" when genuinely unknown, same as
+        // title/artist/year).
         let year = null;
+        let album = '';
         if (currentSong.filename) {
             const meta = await fetchJson(`/api/song/${encodeURIComponent(currentSong.filename)}`);
             if (meta && meta.year) year = meta.year;
+            if (meta && meta.album) album = meta.album;
         }
 
         return {
@@ -178,6 +186,7 @@
             tuning: tuningName,
             path,
             year,
+            album,
             artUrl,
             duration: currentSong.duration || 0,
         };

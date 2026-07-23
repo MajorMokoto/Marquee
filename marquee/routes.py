@@ -50,7 +50,7 @@ _EMPTY_STATE = {
 # saves via the editor, the on-disk file below always wins over this.
 _DEFAULT_LAYOUT = {
     "version": 1,
-    "order": ["nowplaying", "tuning", "year", "path", "score", "info", "progress", "art"],
+    "order": ["nowplaying", "tuning", "year", "path", "score", "info", "progress", "album", "art"],
     "elements": {
         "nowplaying": {"x": 43.13099787785457, "y": 0, "width": 101.0521240234375, "height": 20, "fontSize": 16, "visible": True, "name": "Now Playing"},
         "tuning": {"x": 33.46253908597506, "y": 29.703125000000004, "width": 78.46353149414062, "height": 45.00000762939453, "fontSize": 16, "visible": True, "name": "Tuning"},
@@ -59,6 +59,10 @@ _DEFAULT_LAYOUT = {
         "score": {"x": 72.44491577148438, "y": 0, "width": 143.2864227294922, "height": 104.40625, "fontSize": 20, "visible": True, "name": "Score"},
         "info": {"x": 33.46153846153846, "y": 51.70312500000001, "width": 345.98960876464844, "height": 70.59375, "fontSize": 20, "visible": True, "name": "Song Title & Artist"},
         "progress": {"x": 0, "y": 87, "width": 519.9947967529297, "height": 26, "fontSize": 20, "visible": True, "name": "Song Time"},
+        # New — Album, same .obj-stat shape as Tuning/Year/Path. Positioned
+        # in the previously-empty strip below Song Time (y 87-113) rather
+        # than overlapping any existing element.
+        "album": {"x": 33.46153846153846, "y": 120, "width": 100, "height": 45, "fontSize": 16, "visible": True, "name": "Album"},
         "art": {"x": 0, "y": 0, "scale": 2.07142855844609, "visible": True, "name": "Album Art"},
     },
     "visuals": {

@@ -689,6 +689,11 @@
     <span class="time"><span class="ticker"><span class="ticker-track" id="val-time-duration">0:00</span></span></span>
   </div>
 
+  <div class="obj obj-stat" id="obj-album" data-id="album">
+    <span class="stat-label">Album</span>
+    <span class="stat-value"><span class="ticker"><span class="ticker-track" id="val-album">—</span></span></span>
+  </div>
+
   <canvas class="confetti-canvas" id="confettiCanvas" aria-hidden="true"></canvas>
 </div>
 
@@ -703,7 +708,7 @@
   // visuals.stageWidth/stageHeight below (520x200 for this default).
   const LAYOUT_DATA = {
     version: 1,
-    order: ['nowplaying', 'tuning', 'year', 'path', 'score', 'info', 'progress', 'art'],
+    order: ['nowplaying', 'tuning', 'year', 'path', 'score', 'info', 'progress', 'album', 'art'],
     elements: {
       nowplaying: { x: 43.13099787785457, y: 0, width: 101.0521240234375, height: 20, fontSize: 16, visible: true, name: 'Now Playing' },
       tuning:     { x: 33.46253908597506, y: 29.703125000000004, width: 78.46353149414062, height: 45.00000762939453, fontSize: 16, visible: true, name: 'Tuning' },
@@ -712,6 +717,9 @@
       score:      { x: 72.44491577148438, y: 0, width: 143.2864227294922, height: 104.40625, fontSize: 20, visible: true, name: 'Score' },
       info:       { x: 33.46153846153846, y: 51.70312500000001, width: 345.98960876464844, height: 70.59375, fontSize: 20, visible: true, name: 'Song Title & Artist' },
       progress:   { x: 0, y: 87, width: 519.9947967529297, height: 26, fontSize: 20, visible: true, name: 'Song Time' },
+      // New — same .obj-stat shape as Tuning/Year/Path, in the previously-
+      // empty strip below Song Time instead of overlapping anything.
+      album:      { x: 33.46153846153846, y: 120, width: 100, height: 45, fontSize: 16, visible: true, name: 'Album' },
       art:        { x: 0, y: 0, scale: 2.07142855844609, visible: true, name: 'Album Art' },
     },
     visuals: {
@@ -935,6 +943,7 @@
       tuning: '.stat-label',
       year: '.stat-label',
       score: '.stat-label',
+      album: '.stat-label',
     };
 
     // Both ticker modes need to agree on what the "real" single-copy
@@ -1311,8 +1320,13 @@
       container.style.setProperty('--marquee-bulb-loop-anim-x', scrollOn ? 'marquee-bulb-loop-x' : 'none');
       container.style.setProperty('--marquee-bulb-loop-anim-y', scrollOn ? 'marquee-bulb-loop-y' : 'none');
       container.style.setProperty('--marquee-bulb-flicker-anim', flickerOn ? 'marquee-bulb-flicker' : 'none');
-      const intensity = (typeof src.marqueeBulbFlickerIntensity === 'number' && Number.isFinite(src.marqueeBulbFlickerIntensity))
+      const rawIntensity = (typeof src.marqueeBulbFlickerIntensity === 'number' && Number.isFinite(src.marqueeBulbFlickerIntensity))
         ? src.marqueeBulbFlickerIntensity : 0.6;
+      // See editor.html's identical comment (mirrored here): the raw 0-1
+      // slider value read as doing nothing until ~15% — remapped so 0%
+      // stays genuinely off, but anything above 0 starts at a
+      // 15%-equivalent dip and scales up to 100% from there.
+      const intensity = rawIntensity > 0 ? (0.15 + rawIntensity * 0.85) : 0;
       container.style.setProperty('--marquee-bulb-flicker-intensity', String(intensity));
       // Sync to the shared epoch (see MARQUEE_BULB_EPOCH's own comment):
       // a negative delay equal to "how far into this cycle would we be
@@ -1962,6 +1976,7 @@
       setTextAndReticker('val-tuning', abbreviateTuning(song.tuning));
       setTextAndReticker('val-path', song.path);
       setTextAndReticker('val-year', song.year);
+      setTextAndReticker('val-album', song.album);
       if (song.artUrl && song.artUrl !== lastArtUrl) {
         lastArtUrl = song.artUrl;
         artImg.classList.remove('loaded');
