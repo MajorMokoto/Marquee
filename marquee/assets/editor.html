@@ -246,14 +246,17 @@
     flex-wrap: wrap;
     /* Shared width for all 6 toolbar controls (.edit-toggle pills on the
        left, .reset-btn buttons + .preset-row on the right) — measured
-       from the left column's natural stretch-to-widest width ("Element
-       Outlines:"), then applied as an explicit width everywhere so the
-       right column matches instead of sizing to its own content. Same
-       idea for height — .edit-toggle's checkbox+label content and
+       from the left column's natural stretch-to-widest content, then
+       applied as an explicit width everywhere so the right column
+       matches instead of sizing to its own content. Currently driven by
+       "Unlock Layout:" plus its fixed-position icon+checkbox group (see
+       .toggle-icon-group) — the longest label paired with the widest
+       control, not "Outlines: On/Off" which is shorter. Same idea for
+       height — .edit-toggle's checkbox+label content and
        .reset-btn/.preset-select's plain text naturally settle at
        different heights (34px vs 40px) with matching padding, so this is
        set explicitly everywhere too rather than left to content. */
-    --toolbar-item-w: 170px;
+    --toolbar-item-w: 185px;
     --toolbar-item-h: 40px;
   }
   /* Lock Layout, Zoom, and Element Outlines stacked as three identical
@@ -369,6 +372,109 @@
      sitting on top of the real hoverable control, so no sibling-selector
      trick is needed. */
   .edit-toggle:hover { border-color: var(--vs-text-dim); }
+  /* Lock/Zoom toggles' icons — pinned in a fixed-position group right next
+     to the checkbox, NOT inline after the label text. #lockLayoutLabel and
+     #zoomLabel's 'change' handlers do label.textContent = '...', which
+     swaps between different-length strings ("Lock Layout:"/"Unlock
+     Layout:", "Zoom In:"/"Zoom Out:") — if the icon sat right after the
+     text in the same flex run, it would visibly shift left/right every
+     toggle as the text's width changed. Keeping label and
+     .toggle-icon-group as the .edit-toggle's only two flex children (own
+     justify-content:space-between) means the group's position is anchored
+     to the pill's right edge regardless of the label's width. Icons are
+     drawn from CSS shapes, matching this file's existing no-SVG,
+     no-icon-font pattern (see .vs-checkbox:checked::after's checkmark,
+     .preset-static-label::after's ▾). */
+  .toggle-icon-group { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .zoom-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .zoom-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid #f2f2f2;
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .zoom-icon::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 6px;
+    height: 1.5px;
+    background: #f2f2f2;
+    transform: rotate(45deg);
+    transform-origin: right center;
+  }
+  .zoom-icon-symbol {
+    position: relative;
+    font-size: 9px;
+    line-height: 1;
+    font-weight: 700;
+    color: #f2f2f2;
+    transform: translate(-2px, -2px);
+  }
+  /* Padlock — shackle (::before) drawn as an open-bottomed arc, body
+     (::after) a filled rounded rect painted on top (later in source order
+     = higher paint order for two pseudo-elements on the same box) so its
+     solid --vs-card-bg fill masks the shackle's legs where they'd
+     otherwise poke through, giving the closed state the look of the
+     shackle disappearing into the lock body. Unlike the zoom icon's +/−
+     (which shows the action a click will perform next), this icon shows
+     CURRENT state: .unlocked (default — editMode starts unlocked) rotates
+     +shifts the shackle up and to the right around its bottom-left
+     corner, swinging it open the way a real undone padlock's shackle
+     pivots; the class is removed (closed shackle) once the layout is
+     actually locked. See the editModeInput 'change' handler. */
+  .lock-icon {
+    position: relative;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .lock-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 4px;
+    width: 9px;
+    /* Bottom edge (top:0 + height:10 = y10) overlaps 1px into the body
+       (::after starts at y9, see below) so the body's opaque fill masks
+       the shackle's legs there — without that overlap the two shapes
+       just float apart with a gap, reading as "open" even at rest. */
+    height: 10px;
+    border: 1.5px solid #f2f2f2;
+    border-bottom: none;
+    border-radius: 5px 5px 0 0;
+    box-sizing: border-box;
+    transform-origin: bottom left;
+    transition: transform 0.15s ease;
+  }
+  .lock-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 3px;
+    width: 11px;
+    height: 7px;
+    border: 1.5px solid #f2f2f2;
+    border-radius: 2px;
+    box-sizing: border-box;
+    background: var(--vs-card-bg);
+  }
+  .lock-icon.unlocked::before { transform: translateX(4px) rotate(25deg); }
   .reset-btn {
     width: var(--toolbar-item-w);
     height: var(--toolbar-item-h);
@@ -377,14 +483,14 @@
     justify-content: center;
     background: var(--vs-card-bg);
     border: 1px solid var(--vs-border);
-    color: var(--vs-text-dim);
+    color: #f2f2f2;
     font-size: 0.78rem;
     font-weight: 600;
     padding: 8px 14px;
     border-radius: 999px;
     cursor: pointer;
   }
-  .reset-btn:hover { color: #f2f2f2; border-color: var(--vs-text-dim); }
+  .reset-btn:hover { border-color: var(--vs-text-dim); }
   .swatch:focus-visible, .load-fonts-btn:focus-visible, input:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 2px;
@@ -2241,14 +2347,20 @@
   <div class="toolbar-toggles">
     <label class="edit-toggle">
       <span class="label" id="lockLayoutLabel">Lock Layout:</span>
-      <input type="checkbox" id="editMode" class="vs-checkbox" />
+      <span class="toggle-icon-group">
+        <span class="lock-icon unlocked" id="lockIcon" aria-hidden="true"></span>
+        <input type="checkbox" id="editMode" class="vs-checkbox" />
+      </span>
     </label>
     <label class="edit-toggle">
       <span class="label" id="zoomLabel">Zoom In:</span>
-      <input type="checkbox" id="zoomToggle" class="vs-checkbox" />
+      <span class="toggle-icon-group">
+        <span class="zoom-icon" aria-hidden="true"><span class="zoom-icon-symbol" id="zoomIconSymbol">+</span></span>
+        <input type="checkbox" id="zoomToggle" class="vs-checkbox" />
+      </span>
     </label>
     <label class="edit-toggle">
-      <span class="label">Element Outlines:</span>
+      <span class="label" id="outlinesLabel">Outlines: On</span>
       <input type="checkbox" id="outlinesToggle" class="vs-checkbox" checked />
     </label>
   </div>
@@ -3709,7 +3821,7 @@
       styleOverrides: {
         chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
         borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
-        marqueeScroll: true, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeScroll: true, marqueeScrollSpeed: 10, marqueeEdgeFade: true,
         marqueeSparkle: false, marqueeSparkleSize: 10,
         marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
         marqueeBulbSpeedElements: 80, marqueeBulbScroll: true,
@@ -3718,13 +3830,13 @@
       },
     },
     nowplaying: {
-      x: 43.13099787785457, y: 0,
-      width: 101.0521240234375, height: 20, fontSize: 16, visible: true,
+      x: 40, y: 0,
+      width: 139.7265625, height: 40, fontSize: 16, visible: true,
       name: 'Now Playing',
       useCustomStyles: true,
       styleOverrides: {
-        chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
-        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        chipColor: '#000000', accent: '#e0568c', bold: true, font: 'Crafty Girls',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 14,
         marqueeScroll: false, marqueeScrollSpeed: 80, marqueeEdgeFade: false,
         marqueeSparkle: false, marqueeSparkleSize: 10,
         marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 11,
@@ -3818,7 +3930,7 @@
     edgeRounding: 0,
     confettiEnabled: true,
     confettiDuration: 7,
-    confettiVolume: 0.1,
+    confettiVolume: 1,
     confettiTriggerAt: 100,
     marqueeScroll: true,
     marqueeScrollSpeed: 30,
@@ -3972,7 +4084,18 @@
       }
       layout[id] = JSON.parse(JSON.stringify(entry));
     }
-    const survivingExtraIds = elementOrder.filter((id) => layout[id] && (layout[id].custom || layout[id].isRoll));
+    // A preset's own order can now bake in a Roll id too (see above) — an
+    // id already IN preset.current.order isn't an "extra" survivor, it's
+    // just the preset's own element, and including it here as well would
+    // append it a second time. Without this exclusion, switching to a
+    // preset that already has its own Roll while that same Roll id is
+    // still in the OUTGOING elementOrder (e.g. switching to this same
+    // preset again) duplicates it every time — and since
+    // saveCurrentPresetState builds a preset's order straight off
+    // elementOrder with no dedup of its own, each duplicate then gets
+    // baked into the next autosave too, compounding on repeated switches.
+    const incomingIds = new Set(preset.current.order);
+    const survivingExtraIds = elementOrder.filter((id) => !incomingIds.has(id) && layout[id] && (layout[id].custom || layout[id].isRoll));
     elementOrder = [...preset.current.order, ...survivingExtraIds];
     applyLayout();
     applyOrder();
@@ -6854,6 +6977,7 @@
     editMode = !e.target.checked;
     stage.classList.toggle('editing', editMode);
     document.getElementById('lockLayoutLabel').textContent = e.target.checked ? 'Unlock Layout:' : 'Lock Layout:';
+    document.getElementById('lockIcon').classList.toggle('unlocked', !e.target.checked);
   });
   // Editing-view zoom only — see the ZOOM_SCALE/zoomedIn comment above.
   // Purely visual: doesn't touch layout, visuals, or anything exported.
@@ -6864,12 +6988,14 @@
     zoomedIn = e.target.checked;
     stage.style.zoom = zoomedIn ? String(ZOOM_SCALE) : '';
     document.getElementById('zoomLabel').textContent = zoomedIn ? 'Zoom Out:' : 'Zoom In:';
+    document.getElementById('zoomIconSymbol').textContent = zoomedIn ? '−' : '+';
   });
   // Element Outlines toggle — see the outlinesVisible comment above. Same
   // switch treatment as Zoom — checked = outlines visible (default on).
   document.getElementById('outlinesToggle').addEventListener('change', (e) => {
     outlinesVisible = e.target.checked;
     document.body.classList.toggle('hide-outlines', !outlinesVisible);
+    document.getElementById('outlinesLabel').textContent = outlinesVisible ? 'Outlines: On' : 'Outlines: Off';
   });
   document.getElementById('resetBtn').addEventListener('click', () => {
     // Which of PRESETS to restore — picked by #presetSelect, not
