@@ -105,19 +105,15 @@
     --art-scale: 1;
     --marquee-star-size: 10px;
     --marquee-bulb-flicker-intensity: 0.6;
-    /* Was a flat 880px, picked early and never revisited — scrunched
-       everything into the middle on anything bigger than ~1080p. This
-       scales with the actual window instead of a fixed number that's
-       wrong at one end: generous room on a wide/maximized window, still
-       graceful on FeedBack's ~1080p default window size. */
-    --content-width: min(1200px, 94vw);
+    /* Fixed — never shrinks with a narrower window (see .stage's own
+       comment). A window narrower than this just scrolls horizontally. */
+    --content-width: 1200px;
     /* The actual OBS output size — not a preview convenience. Defaults to
        a realistic lower-third-ish size (520×200), not full 1920×1080; see
        the Layout size control. --stage-ratio keeps the PREVIEW box's
-       aspect ratio matching whatever's configured (not a fixed 16:9)
-       while --stage-w-px caps how big the preview renders — min() with
-       94vw so a large configured canvas still shrinks to fit the page;
-       a small one (like the 520px default) just renders at its true size. */
+       aspect ratio matching whatever's configured (not a fixed 16:9) while
+       --stage-w-px sets exactly how wide the preview renders, regardless
+       of window size (see .stage's own comment). */
     --stage-w-px: 520px;
     --stage-ratio: 520 / 200;
     --font-display: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
@@ -168,11 +164,20 @@
     background: var(--void);
     color: var(--paper);
     font-family: var(--font-body);
-    padding: clamp(20px, 4vw, 56px);
+    padding: 40px;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    /* "safe center": centers when everything fits, but falls back to
+       start-alignment instead of overflowing symmetrically once fixed-
+       width content (the stage, hero, etc.) is wider than the window —
+       plain `center` clips the left/start side and makes it permanently
+       unreachable even with overflow-x scrolling enabled below. */
+    align-items: safe center;
     gap: 28px;
+    /* Horizontal scrollbar once fixed-width content (stage/hero/etc, all
+       pinned sizes now — see their own comments) is wider than the
+       window, instead of ever rescaling anything to fit. */
+    overflow-x: auto;
   }
   /* Visually hidden but still readable by screen readers — the real
      heading text, since the banner below it is a decorative, duplicated-
@@ -234,7 +239,7 @@
        the overlay's font picker changes, since it isn't overlay content. */
     font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 900;
-    font-size: clamp(2rem, 6.5vw, 4.5rem);
+    font-size: 4.5rem;
     letter-spacing: 0.01em;
     text-transform: uppercase;
     color: var(--paper);
@@ -649,9 +654,12 @@
   /* ---- the canvas — genuinely transparent, same as the real output ---- */
   .stage {
     position: relative;
-    /* Renders at the configured Layout size, capped so an oversized
-       configured canvas still fits the page — see --stage-w-px/-ratio. */
-    width: min(var(--stage-w-px), 94vw);
+    /* Always renders at the exact configured Layout size — never shrinks
+       to fit a narrow window. A narrower browser window just gets a
+       horizontal scrollbar (default document overflow — nothing here
+       clips it) instead of scaling the canvas down, so element
+       positions/sizes always preview true-to-output. */
+    width: var(--stage-w-px);
     aspect-ratio: var(--stage-ratio);
     border-radius: var(--edge-rounding);
     /* Strict — real clipping at the stage's TRUE edge, no grace margin.
@@ -753,6 +761,10 @@
     font-size: 18px;
     color: var(--accent);
     font-weight: 700;
+    /* Fixed width, same as .hero/.toolbar — otherwise this reflows/wraps
+       differently as the window narrows, which reads as the text itself
+       "resizing" even though font-size never actually changes. */
+    width: var(--content-width);
     /* body is a column flex with a fixed 28px gap between every top-level
        child — pulling this one up closes some of that gap specifically
        above it, and since everything after it (stage, panels) follows in
@@ -2485,12 +2497,7 @@
     padding: 7px 10px;
   }
   .custom-text-row .text-input { flex: 1; min-width: 0; }
-  .empty-note { font-size: 0.78rem; color: var(--paper-dim); font-style: italic; margin: 0; }</style><!-- TEMPORARY — 1920x1080 guide overlay, remove once the settings menu's
-     fit at 1080p is confirmed. Fixed to the viewport's own top-left
-     (not the page, which can be taller/scroll) so it always marks exactly
-     where a 1920x1080 monitor's edge would fall regardless of scroll
-     position. pointer-events:none so it never blocks clicking through to
-     the real UI underneath. --><div id="tempResolutionGuide1080" aria-hidden="true" style="position:fixed;top:0;left:0;width:1920px;height:1080px;border:3px dashed #ff2d55;box-sizing:border-box;pointer-events:none;z-index:99999;"><span style="position:absolute;top:4px;left:4px;background:#ff2d55;color:#fff;font:700 12px/1.4 sans-serif;padding:2px 6px;border-radius:3px;">1920×1080</span></div><h1 class="sr-only">Welcome to the Marquee</h1><div class="hero" aria-hidden="true">
+  .empty-note { font-size: 0.78rem; color: var(--paper-dim); font-style: italic; margin: 0; }</style><h1 class="sr-only">Welcome to the Marquee</h1><div class="hero" aria-hidden="true">
   <div class="hero-bulbs">
     <span class="hero-bulb" style="animation-delay:0s"></span>
     <span class="hero-bulb" style="animation-delay:.3s"></span>
@@ -3136,6 +3143,22 @@
   // or a value to edit. Reset restores these exact defaults (see
   // defaultVisuals below for the rest of what Reset restores).
   const defaultLayout = {
+    'roll-1': {
+      x: 33.46153846153846, y: 28.999999999999996,
+      width: 202.7109375, height: 46.40625, fontSize: 20, visible: true,
+      isRoll: true, name: 'Marquee Roll 1',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+        borderWidth: 1.2, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: true, marqueeScrollSpeed: 60, marqueeEdgeFade: true,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      },
+    },
     nowplaying: { x: 40, y: 0,
                   width: 139.7265625, height: 20,
       fontSize: 16, visible: true, name: 'Now Playing',
@@ -3162,7 +3185,8 @@
          marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
          marqueeBulbFlickerRandom: false,
          accentRgb: '255 130 0', chipRgb: '0 0 0',
-       } },
+       },
+       rollGroup: 'roll-1', rollSlot: 1 },
     year:
        { x: 48.55068280146672, y: 29.5013033747673, width: 47.833343505859375, height: 45, fontSize: 16, visible: true, name: 'Year',
          useCustomStyles: false,
@@ -3175,7 +3199,8 @@
            marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
            marqueeBulbFlickerRandom: false,
            accentRgb: '255 130 0', chipRgb: '0 0 0',
-         } },
+         },
+         rollGroup: 'roll-1', rollSlot: 1 },
     path:
        { x: 57.74939977205717, y: 29.5013033747673, width: 76.41535949707031, height: 45, fontSize: 16, visible: true, name: 'Path',
          useCustomStyles: false,
@@ -3188,7 +3213,8 @@
            marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
            marqueeBulbFlickerRandom: false,
            accentRgb: '255 130 0', chipRgb: '0 0 0',
-         } },
+         },
+         rollGroup: 'roll-1', rollSlot: 1 },
     score:
       { x: 72.44491577148438, y: 0,
                   width: 143.2864227294922, height: 104.40625, fontSize: 20, visible: true, name: 'Score',
@@ -3222,12 +3248,9 @@
         marqueeBulbFlickerRandom: false,
         accentRgb: '255 130 0', chipRgb: '0 0 0',
       } },
-    // New — same plain .obj-stat shape as Tuning/Year/Path, positioned in
-    // the previously-empty strip below Song Time (y 87-113) rather than
-    // overlapping anything. No useCustomStyles/styleOverrides yet — a
-    // freshly added element starts on plain Global settings, same as info.
     album:
-        { x: 33.46153846153846, y: 120, width: 100, height: 45, fontSize: 16, visible: true, name: 'Album' },
+        { x: 40.38461538461539, y: 38.75, width: 100, height: 45, fontSize: 16, visible: true, name: 'Album',
+          rollGroup: 'roll-1', rollSlot: 1 },
     art:
         { x: 0,
                  y: 0,
@@ -3571,47 +3594,120 @@
   // instead of the generic makePresetSnapshot() clone every other preset
   // still uses — same {id: {...}} shape as defaultLayout above.
   const tallDefaultLayout = {
+    'roll-3': {
+      x: 47.760416666666664, y: 91.53695913461539,
+      width: 156.71875, height: 44, fontSize: 20, visible: true,
+      isRoll: true, name: 'Marquee Roll 3',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: true, marqueeScrollSpeed: 40, marqueeEdgeFade: true,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      },
+    },
+    'roll-2': {
+      x: 47.760416666666664, y: 81.88551682692308,
+      width: 156.71875, height: 50.1875, fontSize: 20, visible: true,
+      isRoll: true, name: 'Marquee Roll 2',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: true, marqueeScrollSpeed: 40, marqueeEdgeFade: true,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      },
+    },
     nowplaying: { x: 33.385416666666664,
   y: 0,
                   width: 101.0521240234375, height: 20,
-              fontSize: 16, visible: true, name: 'Now Playing' },
+              fontSize: 16, visible: true, name: 'Now Playing',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      } },
     tuning:
      { x: 47.760416666666664,
-  y: 81.88502091627855,
+  y: 90.77674278846153,
   width: 65.75,
-             height: 47.947906494140625, fontSize: 16, visible: true, name: 'Tuning' },
+             height: 47.953125, fontSize: 16, visible: true, name: 'Tuning',
+       useCustomStyles: false, rollGroup: 'roll-3', rollSlot: 1 },
     year:
        { x: 47.760416666666664,
-  y: 91.10652851608563,
+  y: 81.88401442307692,
   width: 65.75,
-             height: 46.24998474121094,
-  fontSize: 16, visible: true, name: 'Year' },
+             height: 47.953125,
+  fontSize: 16, visible: true, name: 'Year',
+       useCustomStyles: false, rollGroup: 'roll-2', rollSlot: 1 },
     path:
        { x: 69.67708333333333,
-   y: 91.10652707657724,
+   y: 91.10576923076923,
   width: 90.96875,
           height: 46.24998474121094,
-  fontSize: 16, visible: true, name: 'Path' },
+  fontSize: 16, visible: true, name: 'Path',
+       rollGroup: 'roll-3', rollSlot: 1 },
     score:
       { x: 0,
                    y: 81.8850194490873,
    width: 143.28125,
          height: 94.19789123535156,
-  fontSize: 20, visible: true, name: 'Score' },
+  fontSize: 20, visible: true, name: 'Score',
+        useCustomStyles: true,
+        styleOverrides: {
+          chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+          borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+          marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+          marqueeSparkle: false, marqueeSparkleSize: 4,
+          marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+          marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+          marqueeBulbFlickerRandom: false,
+          accentRgb: '255 130 0', chipRgb: '0 0 0',
+        } },
+    album:
+       { x: 69.67708333333333, y: 81.88401442307692, width: 90.96875, height: 47.953125, fontSize: 16, visible: true, name: 'Album',
+         useCustomStyles: false, rollGroup: 'roll-2', rollSlot: 1 },
     info:
        { x: 0,
                    y: 70.34555508540227,
   width: 300,
-               height: 60.010398864746094, fontSize: 20, visible: true, name: 'Song Title & Artist' },
+               height: 60.010398864746094, fontSize: 20, visible: true, name: 'Song Title & Artist',
+       useCustomStyles: false },
     progress:
    { x: 0,
                    y: 61.692710289588334, width: 300,
                height: 44.99999237060547,
-  fontSize: 20, visible: true, name: 'Song Time' },
+  fontSize: 20, visible: true, name: 'Song Time',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+        borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
+        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      } },
     art:
         { x: 0,
                    y: 3.8461538461538463, scale: 3.580977281197748,
-                                            visible: true, name: 'Album Art' },
+                                            visible: true, name: 'Album Art',
+                   useCustomStyles: false },
   };
   const tallDefaultVisuals = {
     accent: '#ff8200',
@@ -3622,11 +3718,12 @@
     borderWidth: 1,
     bold: false,
     font: 'Arial Black',
+    textColor: '#f3e9d8',
     stageWidth: 300,
     stageHeight: 520,
     canvasBgColor: '#000000',
     canvasBgRgb: '0 0 0',
-    canvasBgAlpha: 0,
+    canvasBgAlpha: 1,
     elementHeadSize: 10,
     edgeRounding: 0,
     confettiEnabled: true,
@@ -3634,18 +3731,18 @@
     confettiVolume: 1,
     confettiTriggerAt: 100,
     marqueeScroll: false,
-    marqueeScrollSpeed: 80,
-    marqueeEdgeFade: false,
+    marqueeScrollSpeed: 10,
+    marqueeEdgeFade: true,
     marqueeSparkle: false,
-    marqueeSparkleSize: 10,
+    marqueeSparkleSize: 4,
     marqueeBulbMode: 'off',
     marqueeBulbSize: 2.8,
-    marqueeBulbGap: 11,
-    marqueeBulbSpeedElements: 80,
-    marqueeBulbSpeedLayout: 80,
-    marqueeBulbScroll: true,
+    marqueeBulbGap: 5,
+    marqueeBulbSpeedElements: 10,
+    marqueeBulbSpeedLayout: 10,
+    marqueeBulbScroll: false,
     marqueeBulbFlicker: false,
-    marqueeBulbFlickerIntensity: 0.6,
+    marqueeBulbFlickerIntensity: 0,
     marqueeBulbFlickerRandom: false,
     // Seconds the whole overlay takes to fade to/from invisible on
     // playback start/stop — see render.html's fade handling. Tall's own
@@ -3673,13 +3770,26 @@
                   width: 207,
                height: 57, fontSize: 16, visible: true,
   name: 'Score' },
+    album:
+       { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Album' },
     info:
        { x: 0,
                   y: 61.333333333333336, width: 300,
                height: 58.001312255859375, fontSize: 20, visible: true, name: 'Song Title & Artist' },
     progress:
    { x: 30.998260498046875, y: 37.93836212158203,
-  width: 207.00518798828125, height: 36.18721008300781, fontSize: 20, visible: true, name: 'Song Time' },
+  width: 207.00518798828125, height: 36.18721008300781, fontSize: 20, visible: true, name: 'Song Time',
+     useCustomStyles: true,
+     styleOverrides: {
+       chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+       borderWidth: 1, edgeRounding: 0, elementHeadSize: 6,
+       marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
+       marqueeSparkle: false, marqueeSparkleSize: 4,
+       marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 10,
+       marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+       marqueeBulbFlickerRandom: false,
+       accentRgb: '255 130 0', chipRgb: '0 0 0',
+     } },
     art:
         { x: 0,
                   y: 0.0625,
@@ -3695,11 +3805,12 @@
     borderWidth: 1,
     bold: false,
     font: 'Arial Black',
+    textColor: '#f3e9d8',
     stageWidth: 300,
     stageHeight: 150,
     canvasBgColor: '#000000',
     canvasBgRgb: '0 0 0',
-    canvasBgAlpha: 0,
+    canvasBgAlpha: 1,
     elementHeadSize: 6,
     edgeRounding: 0,
     confettiEnabled: true,
@@ -3707,18 +3818,18 @@
     confettiVolume: 1,
     confettiTriggerAt: 100,
     marqueeScroll: false,
-    marqueeScrollSpeed: 80,
-    marqueeEdgeFade: false,
+    marqueeScrollSpeed: 10,
+    marqueeEdgeFade: true,
     marqueeSparkle: false,
-    marqueeSparkleSize: 10,
+    marqueeSparkleSize: 4,
     marqueeBulbMode: 'off',
-    marqueeBulbSize: 2.8,
-    marqueeBulbGap: 11,
-    marqueeBulbSpeedElements: 80,
-    marqueeBulbSpeedLayout: 80,
-    marqueeBulbScroll: true,
+    marqueeBulbSize: 1.5,
+    marqueeBulbGap: 5,
+    marqueeBulbSpeedElements: 10,
+    marqueeBulbSpeedLayout: 10,
+    marqueeBulbScroll: false,
     marqueeBulbFlicker: false,
-    marqueeBulbFlickerIntensity: 0.6,
+    marqueeBulbFlickerIntensity: 0,
     marqueeBulbFlickerRandom: false,
     // Seconds the whole overlay takes to fade to/from invisible on
     // playback start/stop — see render.html's fade handling. Small's own
@@ -3731,61 +3842,108 @@
   // here from what was briefly Tall's default) — same {id: {...}} shape
   // as defaultLayout above.
   const userDefaultLayout = {
-    // No Roll baked in right now — the exported snapshot this was last
-    // updated from didn't have one. loadPresetState()/the resetBtn
-    // handler both still know how to recreate a Roll on demand if a
-    // future update to this preset adds one back (see their own
-    // comments) — nothing else needs to change here for that.
+    art:
+        { x: 0, y: 0, scale: 2.497458110521351, visible: true, name: 'Album Art' },
+    'roll-5': {
+      x: 10.416666666666668, y: 0,
+      width: 1439.375, height: 54, fontSize: 20, visible: true,
+      isRoll: true, name: 'Marquee Roll 5',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#ff8200', bold: false, font: 'Arial Black',
+        borderWidth: 0, edgeRounding: 0, elementHeadSize: 16,
+        marqueeScroll: true, marqueeScrollSpeed: 120, marqueeEdgeFade: true,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 80,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      },
+    },
+    'roll-4': {
+      x: 47.509765625, y: 95.92447916666667,
+      width: 1007.8125, height: 44.015625, fontSize: 20, visible: true,
+      isRoll: true, name: 'Marquee Roll 4',
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#eea353', textColor: '#eea358', bold: false, font: 'Arial Black',
+        borderWidth: 0, edgeRounding: 0, elementHeadSize: 16,
+        marqueeScroll: true, marqueeScrollSpeed: 120, marqueeEdgeFade: true,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 80,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '238 163 83', chipRgb: '0 0 0',
+      },
+    },
     nowplaying: { x: 39.073079427083336, y: 57.96296296296296,
     width: 241.375,
             height: 87.703125,
           fontSize: 20, visible: true,
-  name: 'Now Playing', rollGroup: null, rollSlot: 1 },
+  name: 'Now Playing', rollGroup: 'roll-5', rollSlot: 1, useCustomStyles: false },
     tuning:
      { x: 49.0087890625,
       y: 70,
                    width: 247.046875,
          height: 80,
                  fontSize: 40, visible: true,
-  name: 'Tuning', rollGroup: null, rollSlot: 1 },
+  name: 'Tuning', rollGroup: 'roll-4', rollSlot: 1 },
     year:
        { x: 24.686686197916664, y: 70,
                    width: 315.015625,
          height: 80,
                  fontSize: 40, visible: true,
-  name: 'Year', rollGroup: null, rollSlot: 1 },
+  name: 'Year', rollGroup: 'roll-4', rollSlot: 1 },
     path:
        { x: 65.36295572916667,
   y: 70,
                    width: 266.25,
              height: 80,
                  fontSize: 40, visible: true,
-  name: 'Path', rollGroup: null, rollSlot: 1 },
+  name: 'Path', rollGroup: 'roll-4', rollSlot: 1 },
     score:
-      { x: 80,
-                 y: 53.768807870370374,
+      { x: 85.38411458333333,
+                 y: 0,
    width: 280.625,
-            height: 204.296875,
+            height: 108,
          fontSize: 40, visible: true,
-  name: 'Score', rollGroup: null, rollSlot: 1 },
+  name: 'Score', rollGroup: null, rollSlot: 1,
+        useCustomStyles: true,
+        styleOverrides: {
+          chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+          borderWidth: 0, edgeRounding: 0, elementHeadSize: 16,
+          marqueeScroll: false, marqueeScrollSpeed: 120, marqueeEdgeFade: false,
+          marqueeSparkle: false, marqueeSparkleSize: 4,
+          marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 80,
+          marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+          marqueeBulbFlickerRandom: false,
+          accentRgb: '255 130 0', chipRgb: '0 0 0',
+        } },
+    album:
+       { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: true, name: 'Album', rollGroup: 'roll-4', rollSlot: 1 },
     info:
        { x: 11.614583333333334, y: 80,
                    width: 1521.203125,
         height: 185,
                 fontSize: 70, visible: true,
-  name: 'Song Title & Artist', rollGroup: null, rollSlot: 1 },
+  name: 'Song Title & Artist', rollGroup: 'roll-5', rollSlot: 1 },
     progress:
-   { x: 3.5416666666666665, y: 52.59259259259259,
-    width: 583.953125,
-         height: 103,
-                fontSize: 20, visible: true,
-  name: 'Song Time', rollGroup: null, rollSlot: 1 },
-    art:
-        { x: 79.22932942708333,
-  y: 0.5917245370370371,
-   scale: 4.640315072177496,
-                                            visible: true,
-  name: 'Album Art' },
+   { x: 0, y: 95.92447916666667,
+    width: 912.1875,
+         height: 44.015625,
+                fontSize: 25, visible: true,
+  name: 'Song Time', rollGroup: null, rollSlot: 1,
+      useCustomStyles: true,
+      styleOverrides: {
+        chipColor: '#000000', chipAlpha: 0, accent: '#ff8200', textColor: '#f3e9d8', bold: false, font: 'Arial Black',
+        borderWidth: 0, edgeRounding: 0, elementHeadSize: 16,
+        marqueeScroll: false, marqueeScrollSpeed: 120, marqueeEdgeFade: false,
+        marqueeSparkle: false, marqueeSparkleSize: 4,
+        marqueeBulbs: false, marqueeBulbSize: 1.5, marqueeBulbGap: 5, marqueeBulbSpeedElements: 80,
+        marqueeBulbScroll: false, marqueeBulbFlicker: false, marqueeBulbFlickerIntensity: 0,
+        marqueeBulbFlickerRandom: false,
+        accentRgb: '255 130 0', chipRgb: '0 0 0',
+      } },
   };
   const userDefaultVisuals = {
     accent: '#ff8200',
@@ -3796,6 +3954,7 @@
     borderWidth: 0,
     bold: false,
     font: 'Arial Black',
+    textColor: '#f3e9d8',
     stageWidth: 1920,
     stageHeight: 1080,
     canvasBgColor: '#000000',
@@ -3807,16 +3966,16 @@
     confettiDuration: 7,
     confettiVolume: 1,
     confettiTriggerAt: 100,
-    marqueeScroll: false,
+    marqueeScroll: true,
     marqueeScrollSpeed: 120,
-    marqueeEdgeFade: false,
+    marqueeEdgeFade: true,
     marqueeSparkle: false,
     marqueeSparkleSize: 4,
     marqueeBulbMode: 'off',
     marqueeBulbSize: 1.5,
     marqueeBulbGap: 5,
-    marqueeBulbSpeedElements: 80,
-    marqueeBulbSpeedLayout: 80,
+    marqueeBulbSpeedElements: 10,
+    marqueeBulbSpeedLayout: 10,
     marqueeBulbScroll: false,
     marqueeBulbFlicker: false,
     marqueeBulbFlickerIntensity: 0,
@@ -3880,6 +4039,8 @@
                    y: 82.6086956521739,
    width: 576, height: 30,
   fontSize: 16, visible: true, name: 'Song Time', rollGroup: null, rollSlot: 1 },
+    album:
+       { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Album', rollGroup: null, rollSlot: 1 },
     art:
         { x: 76,
                   y: 19.130434782608695, scale: 1.5714285714285714, visible: true, name: 'Album Art' },
@@ -3948,6 +4109,8 @@
    { x: 1.3333333333333333,
   y: 91.70731707317073,
   width: 290, height: 30, fontSize: 14, visible: true, name: 'Song Time', rollGroup: null, rollSlot: 1 },
+    album:
+       { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Album', rollGroup: null, rollSlot: 1 },
     art:
         { x: 1.3333333333333333,
   y: 13.170731707317072, scale: 3.4523809523809526, visible: true, name: 'Album Art' },
@@ -4010,6 +4173,8 @@
        { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Path', rollGroup: null, rollSlot: 1 },
     year:
        { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Year', rollGroup: null, rollSlot: 1 },
+    album:
+       { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Album', rollGroup: null, rollSlot: 1 },
     art:
         { x: 0, y: 0,
                  scale: 5, visible: true, name: 'Album Art' },
@@ -4083,6 +4248,8 @@
        { x: 0,
     y: 0,
                   width: 400, height: 56, fontSize: 22, visible: true, name: 'Song Title & Artist', rollGroup: null, rollSlot: 1 },
+    album:
+       { x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: false, name: 'Album', rollGroup: null, rollSlot: 1 },
     art:
         { x: 1.5,
   y: 11.538461538461538, scale: 4.619047619047619, visible: true, name: 'Album Art' },
@@ -4156,7 +4323,7 @@
       styleOverrides: {
         chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
         borderWidth: 2.1, edgeRounding: 0, elementHeadSize: 10,
-        marqueeScroll: true, marqueeScrollSpeed: 10, marqueeEdgeFade: true,
+        marqueeScroll: true, marqueeScrollSpeed: 80, marqueeEdgeFade: true,
         marqueeSparkle: false, marqueeSparkleSize: 4,
         marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5,
         marqueeBulbSpeedElements: 10, marqueeBulbScroll: false,
@@ -4194,6 +4361,10 @@
       x: 57.74989788348858, y: 29.700523376464844,
       width: 76.41535949707031, height: 45, fontSize: 16, visible: true,
       name: 'Path', rollGroup: 'roll-1', rollSlot: 1, useCustomStyles: false,
+    },
+    album: {
+      x: 0, y: 0, width: 100, height: 24, fontSize: 16, visible: true, name: 'Album',
+      rollGroup: 'roll-1', rollSlot: 1,
     },
     score: {
       x: 72.44491577148438, y: 0,
@@ -4235,7 +4406,7 @@
       styleOverrides: {
         chipColor: '#000000', accent: '#e0568c', bold: false, font: 'Crafty Girls',
         borderWidth: 1, edgeRounding: 0, elementHeadSize: 10,
-        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: true,
+        marqueeScroll: false, marqueeScrollSpeed: 10, marqueeEdgeFade: false,
         marqueeSparkle: false, marqueeSparkleSize: 4,
         marqueeBulbs: false, marqueeBulbSize: 2.8, marqueeBulbGap: 5,
         marqueeBulbSpeedElements: 10, marqueeBulbScroll: false,
@@ -4689,14 +4860,8 @@
   // recentered, per the request. Works entirely in the DESIGN/logical
   // pixel space (visuals.stageWidth/stageHeight — what render.html
   // actually renders at 1:1), not the editor's own on-screen
-  // getBoundingClientRect(). .stage's CSS caps its ON-SCREEN size at
-  // `min(var(--stage-w-px), 94vw)`, so in any browser window narrower
-  // than the configured stage width, an element deliberately sized to
-  // hug the full stage (e.g. a full-width marquee banner) would measure
-  // as "wider than the on-screen stage" purely from that viewport cap —
-  // even though it's perfectly in-bounds in the actual design — and get
-  // wrongly recentered. That was the bug behind "the Tall preset isn't
-  // working" after Tall's Song Title & Artist banner was set to the
+  // getBoundingClientRect() — that was the bug behind "the Tall preset
+  // isn't working" after Tall's Song Title & Artist banner was set to the
   // full 1920px stage width: comparing raw layout numbers against
   // visuals.stageWidth/Height instead makes this independent of
   // whatever size the editor happens to be rendered at.
@@ -8561,6 +8726,20 @@
   // the file calls these on its own outside of a user action.
   // ============================================================
   populateFontPicker(FALLBACK_FONTS, { fromSystem: false });
+  // Standard's own default now bakes in a Marquee Roll (roll-1) — that DOM
+  // element doesn't exist in the static canvas HTML like the built-ins do,
+  // so it has to be created here too, not just on preset-switch (mirrors
+  // loadPresetState's own recreation branch).
+  for (const id of Object.keys(layout)) {
+    const entry = layout[id];
+    if (entry && entry.isRoll && !document.getElementById('obj-' + id)) {
+      const el = buildRollElementDom(id, entry.name || id);
+      stage.appendChild(el);
+      wireObject(el);
+      const num = parseInt(String(id).replace('roll-', ''), 10);
+      if (Number.isFinite(num) && num > rollCounter) rollCounter = num;
+    }
+  }
   applyLayout();
   // Runs after applyLayout (needs elements already correctly positioned to
   // measure them against) — matches the CSS defaults on first load, so
