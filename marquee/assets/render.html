@@ -82,33 +82,79 @@
     border-radius: var(--edge-rounding);
     overflow: hidden;
     background: transparent;
-    /* The border ring is `inset`, not a plain spread — a plain
-       `0 0 0 var(--border-width) var(--accent)` shadow draws OUTSIDE the
-       element's edges, which needs extra space beyond the box's own
-       bounds to be visible. That space exists in the editor's own canvas
-       (it sits inside page padding there), but not here: this stage is
-       deliberately sized to 100vw/100vh below, to exactly match the OBS
-       Browser Source dimensions with nothing outside it — so an
-       outside-drawn shadow has nowhere to render and gets clipped away
-       entirely. Reported live: the top edge in particular had no border
-       at all. `inset` draws the same ring just inside the box's own
-       edges instead, needing no space beyond what the stage already has.
-       The drop shadow (the OTHER value here) has this exact same problem
-       and is NOT inset — it's realistically non-functional in a real OBS
-       output for the same reason, left as-is since it wasn't reported and
-       removing it wasn't asked for. */
-    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8), inset 0 0 0 var(--border-width) var(--accent);
+    /* Drop shadow only now — the layout-wide border ring moved to
+       .stage::after below (see its own comment for why: box-shadow/
+       border on .stage ITSELF paints as part of .stage's own box
+       decoration, which happens BEFORE any of .stage's children paint —
+       so any element sitting flush against the canvas edge (full-bleed
+       Album Art, a full-width Marquee Roll/banner, ...) painted directly
+       over the ring wherever they overlapped it. Reported live: the
+       ring didn't show at all in a real OBS output, because the active
+       layout had element(s) covering it basically all the way around.
+       This exact "children paint over my own border" problem is why
+       .obj::after exists for individual elements (see its own comment)
+       — .stage needed the identical fix, just at the canvas level
+       instead of the per-element one. This box-shadow's own inset-vs-
+       outset history (it used to double as the border ring too, drawn
+       inset so it wouldn't get clipped by the stage having zero space
+       outside it) is moot now that the border isn't here at all. */
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8);
     /* Whole-overlay fade, driven by JS toggling .stage-visible based on
        state.song (or an active editor preview) — see updateVisibility()
        below. Starts invisible: nothing should show before we've heard
        from the backend at all, matching "invisible when no song is
        playing" as the default rather than a brief flash of the last
        static build's placeholder-ish look. --fade-seconds comes from
-       visuals.fadeSeconds (editor-configurable, default 5s). */
+       visuals.fadeSeconds (editor-configurable, default 5s).
+       Fade OUT (this rule — the class getting REMOVED transitions
+       toward whatever THIS selector says): reads as "stays fully
+       visible, then disappears in one quick beat at the very end,"
+       not "gradually gets dimmer for the whole configured duration."
+       transition-delay holds the current (visible) opacity in place for
+       (--fade-seconds minus 1s), THEN the 1s duration ramps it down —
+       so no matter how long --fade-seconds is (5s, 10s, whatever), the
+       actual visible ramp is always the last 1 second of it.
+       min(1s, ...) on the duration and max(..., 0s) on the delay both
+       exist for the same reason: a --fade-seconds shorter than 1s (or
+       0s outright, e.g. the "USER" preset's all-off default) has less
+       than a full second to work with at all — clamping both keeps a
+       sub-1s or zero setting fading over its own real length (or not
+       fading at all at 0s) instead of a flat 1s ramp ignoring what was
+       actually configured. */
     opacity: 0;
-    transition: opacity var(--fade-seconds, 5s) ease;
+    transition: opacity min(1s, var(--fade-seconds, 5s)) ease-in max(calc(var(--fade-seconds, 5s) - 1s), 0s);
   }
-  .stage.stage-visible { opacity: 1; }
+  .stage.stage-visible {
+    opacity: 1;
+    /* Fade IN: a decelerating curve instead of linear — reads as
+       "already most of the way there almost immediately, then eases
+       into fully settled" rather than a uniform ramp the whole way.
+       Duration is the full --fade-seconds here (unlike fade-out above,
+       there's no "only the last second" ask for this direction). */
+    transition: opacity var(--fade-seconds, 5s) cubic-bezier(0.05, 0.7, 0.1, 1);
+  }
+  /* The layout-wide border ring, as a ::after pseudo-element instead of a
+     box-shadow/border property on .stage itself — see .stage's own
+     comment for why. A ::after is the LAST thing painted for its own
+     box, so this always sits on top of every real child of .stage, same
+     guarantee .obj::after already gives each individual element's own
+     border. That alone isn't enough here though: every .obj gets an
+     explicit inline z-index (see applyOrder/renderLayout) putting it in
+     its own stacking context above .stage::after's default (auto) level
+     regardless of DOM order — so this also needs its own z-index above
+     the highest any .obj can reach. Deliberately placed just ABOVE
+     .confetti-canvas's own 10000, not merely above .obj's ordering
+     range — see editor.html's matching comment for why a tie isn't
+     good enough here. */
+  .stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 10001;
+    pointer-events: none;
+    border: var(--border-width) solid var(--accent);
+    border-radius: var(--edge-rounding);
+  }
   .stage-canvas-bg {
     position: absolute;
     inset: 0;
@@ -819,7 +865,12 @@
     // useCustomStyles itself — it only ever RESOLVES whatever the editor
     // already saved, so there's no UI here, just the same read-side
     // logic, gated the same single-flag way (useCustomStyles), not a
-    // per-key one.
+    // per-key one. textColor is ALSO intentionally absent here (unlike
+    // editor.html's own OVERRIDABLE_SETTINGS, which does include it) —
+    // this list only exists to feed getEffectiveVisualsFor()'s merged
+    // `eff` object for ticker/bulb behavior; nothing here ever reads
+    // eff.textColor. applyElementStyleOverrides below reads ov.textColor
+    // directly instead, same as editor.html does.
     const OVERRIDABLE_SETTINGS = [
       { key: 'chipColor', type: 'coloralpha', alphaKey: 'chipAlpha' },
       { key: 'accent', type: 'color' },
@@ -846,6 +897,18 @@
       if (key === 'marqueeBulbs') return visuals.marqueeBulbMode === 'all' || visuals.marqueeBulbMode === 'elements';
       return visuals[key];
     }
+    // Mirrors editor.html's own hexToRgbChannels — recomputes the RGB
+    // channel string from a hex color when a styleOverrides entry has
+    // accent/chipColor but (e.g. from a hand-edited or older layout JSON)
+    // is missing its accentRgb/chipRgb sibling, instead of writing an
+    // empty --accent-rgb/--chip-rgb custom property (which breaks the
+    // rgba(var(--accent-rgb), alpha) color functions that consume it).
+    function hexToRgbChannels(hex) {
+      const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+      if (!m) return '0 0 0';
+      const num = parseInt(m[1], 16);
+      return [(num >> 16) & 255, (num >> 8) & 255, num & 255].join(' ');
+    }
     function getEffectiveVisualsFor(id) {
       const useCustom = !!(layout[id] && layout[id].useCustomStyles);
       const ov = (useCustom && layout[id].styleOverrides) || {};
@@ -861,7 +924,7 @@
       const useCustom = !!(layout[id] && layout[id].useCustomStyles);
       const ov = (useCustom && layout[id].styleOverrides) || {};
       if ('chipColor' in ov) {
-        el.style.setProperty('--chip-rgb', ov.chipRgb || '');
+        el.style.setProperty('--chip-rgb', ov.chipRgb || hexToRgbChannels(ov.chipColor));
         el.style.setProperty('--chip-alpha', String(typeof ov.chipAlpha === 'number' ? ov.chipAlpha : 1));
       } else {
         el.style.removeProperty('--chip-rgb');
@@ -869,7 +932,7 @@
       }
       if ('accent' in ov) {
         el.style.setProperty('--accent', ov.accent);
-        el.style.setProperty('--accent-rgb', ov.accentRgb || '');
+        el.style.setProperty('--accent-rgb', ov.accentRgb || hexToRgbChannels(ov.accent));
       } else {
         el.style.removeProperty('--accent');
         el.style.removeProperty('--accent-rgb');
@@ -927,11 +990,22 @@
     lastLayout = layout;
 
     // A re-apply (not the first call) may be dropping/renaming custom text
-    // elements the previous layout had — clear them all and let the
-    // "build custom elements" step below recreate whatever the NEW data
-    // actually contains, same as the editor's own importState() does on
-    // every import rather than trying to diff old vs. new custom ids.
+    // or Marquee Roll elements the previous layout had — clear them all
+    // and let the "build custom/roll elements" step below recreate
+    // whatever the NEW data actually contains, same as the editor's own
+    // importState() does on every import rather than trying to diff old
+    // vs. new ids. Reported live (only ever showing up inside FeedBack,
+    // never when just testing the editor's own canvas preview — because
+    // editor.html's loadPresetState already has its own removal step for
+    // this, see its own comment): switching a preset that had a Roll to
+    // one that didn't left that Roll's DOM element behind forever — the
+    // per-id loops below only ever touch ids present in the CURRENT
+    // layout, so an orphaned id from a previous layout is simply never
+    // looked at again, staying fully visible with its last content
+    // alongside whatever the new preset renders. .obj-custom already got
+    // this treatment; .obj-roll needed the identical fix.
     document.querySelectorAll('.obj-custom').forEach((el) => el.remove());
+    document.querySelectorAll('.obj-roll').forEach((el) => el.remove());
 
     const NAME_SYNC_SELECTOR = {
       // .ticker-track, not .eyebrow-standalone itself — Now Playing's
@@ -1914,7 +1988,25 @@
     if (visible === lastVisible) return;
     lastVisible = visible;
     const stage = document.getElementById('stage');
-    if (stage) stage.classList.toggle('stage-visible', visible);
+    if (!stage) return;
+    if (visible) {
+      // Fade IN starts from a 15% floor, not literally 0 — snap there
+      // instantly (transition disabled, then a forced reflow commits it
+      // with nothing animating yet) before re-enabling the transition and
+      // adding .stage-visible, so the .stage.stage-visible rule's own
+      // transition (see its CSS comment) carries it the rest of the way
+      // from 15% up to 100%, instead of continuing from a literal 0%.
+      stage.style.transition = 'none';
+      stage.style.opacity = '0.15';
+      void stage.offsetWidth;
+      stage.style.transition = '';
+      stage.style.opacity = '';
+      stage.classList.add('stage-visible');
+    } else {
+      // Fade OUT is untouched — .stage's own rule (see its CSS comment)
+      // already handles holding at 100% then ramping to a true 0%.
+      stage.classList.remove('stage-visible');
+    }
   }
 
   function applyLiveState(state) {

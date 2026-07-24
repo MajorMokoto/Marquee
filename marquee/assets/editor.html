@@ -167,11 +167,18 @@
     padding: 40px;
     display: flex;
     flex-direction: column;
-    /* "safe center": centers when everything fits, but falls back to
-       start-alignment instead of overflowing symmetrically once fixed-
-       width content (the stage, hero, etc.) is wider than the window —
-       plain `center` clips the left/start side and makes it permanently
-       unreachable even with overflow-x scrolling enabled below. */
+    /* Plain `center` first as a fallback: browsers that don't understand
+       `safe center` (pre-2024 Chromium, older WebViews/OBS Browser
+       Sources) drop that whole declaration and would otherwise fall back
+       to `normal` (no centering at all) rather than this. Browsers that
+       DO understand `safe center` apply it instead of the previous line
+       per normal CSS cascade rules. "safe center": centers when
+       everything fits, but falls back to start-alignment instead of
+       overflowing symmetrically once fixed-width content (the stage,
+       hero, etc.) is wider than the window — plain `center` alone clips
+       the left/start side and makes it permanently unreachable even with
+       overflow-x scrolling enabled below. */
+    align-items: center;
     align-items: safe center;
     gap: 28px;
     /* Horizontal scrollbar once fixed-width content (stage/hero/etc, all
@@ -676,14 +683,34 @@
        has no background at all, so OBS Browser Source composites straight
        through to the game capture underneath. */
     background: transparent;
-    /* Was a barely-visible fixed rgba(...,0.06) ring outside of edit mode,
-       only turning accent-colored while .editing — a leftover from when
-       this was gated by the (now-removed) Element Borders toggle. Border
-       Thickness is the only border control now, and it applies
-       consistently everywhere else regardless of edit/lock state, so the
-       ring does too — same var(--border-width)/var(--accent) whether
-       you're editing or not. */
-    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8), 0 0 0 var(--border-width) var(--accent);
+    /* Drop shadow only — the layout-wide border ring moved to .stage::after
+       below (mirrors render.html's own fix for the exact same bug: a
+       box-shadow/border property on .stage itself paints as part of
+       .stage's own box decoration, which happens BEFORE any of .stage's
+       children paint, so a full-bleed element (Album Art, a full-width
+       Roll, ...) sitting flush against the canvas edge painted directly
+       over the ring wherever it overlapped — reported live as "no border
+       around the entire layout" in the real OBS output even though the
+       ring's CSS itself was correct). */
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.8);
+  }
+  /* See render.html's matching comment — a ::after paints after every
+     real child of .stage regardless of DOM order, but every .obj still
+     needs to be OUTRANKED explicitly: applyOrder() gives each one its
+     own inline z-index, putting it in a stacking context above this
+     pseudo-element's default (auto) level no matter what. z-index here
+     is deliberately ABOVE .confetti-canvas's own 10000 (not just above
+     .obj.dragging/.obj.resizing's 9999) — tying exactly at 9999 with a
+     currently-dragged/resized element would leave the winner down to
+     engine-specific tie-breaking instead of a guaranteed result. */
+  .stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 10001;
+    pointer-events: none;
+    border: var(--border-width) solid var(--accent);
+    border-radius: var(--edge-rounding);
   }
   /* Above the ordering z-index range AND above .obj.dragging/.obj.resizing's
      9999 (see applyOrder in JS) — a confetti burst should never end up
@@ -9031,6 +9058,17 @@
   // reloading, instead of just firing the request and reloading over it. ──
   let lastSentJSON = null;
   function saveLayoutToBackend() {
+    // A hidden/background tab (left open after switching away, or a
+    // second editor tab someone forgot about) never autosaves — see the
+    // interval below and the visibilitychange handler just past it.
+    // Reported live: a stale background tab kept re-POSTing its own
+    // old in-memory preset every AUTOSAVE_INTERVAL_MS, repeatedly
+    // clobbering a DIFFERENT tab's fresh preset switch on the shared
+    // backend — every connected render.html (and OBS) would flicker
+    // back to the stale preset moments after the real switch, until the
+    // stale tab was closed. Skipping the save entirely while hidden
+    // stops a background tab from ever fighting a foreground one.
+    if (document.visibilityState === 'hidden') return Promise.resolve();
     const json = exportState();
     if (json === lastSentJSON) return Promise.resolve();
     showBadge('Saving…', '#b8a88c');
@@ -9046,6 +9084,36 @@
       });
   }
   setInterval(saveLayoutToBackend, typeof AUTOSAVE_INTERVAL_MS === 'number' ? AUTOSAVE_INTERVAL_MS : 800);
+  // Preset switches push to the backend IMMEDIATELY instead of waiting up
+  // to AUTOSAVE_INTERVAL_MS for the next poll — the tool's own presetSelect
+  // 'change' handler (registered earlier in this file) already updates
+  // `layout`/`elementOrder`/`visuals` synchronously, so by the time this
+  // listener runs, exportState() already reflects the NEWLY selected
+  // preset. Reported live: switching presets (especially several times in
+  // a row) then navigating away inside FeedBack before the next autosave
+  // tick fired could leave the backend — and OBS — on an earlier preset
+  // than whatever was actually last selected, since nothing forced a save
+  // at the moment of the switch itself. A plain second 'change' listener
+  // here, not folded into the tool's own handler, keeps this file's diff
+  // against the standalone design tool to just this appended block.
+  presetSelect.addEventListener('change', saveLayoutToBackend);
+  // Coming BACK from hidden, re-sync from the backend before resuming
+  // autosave, instead of trusting this tab's own (possibly now-stale)
+  // in-memory layout — another tab may well have saved something newer
+  // while this one was in the background. A hidden tab has no legitimate
+  // reason to be mid-edit, so there's nothing of this tab's own to lose
+  // by re-pulling the real current state first.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    fetch(LAYOUT_URL).then((r) => (r.ok ? r.json() : null)).then((data) => {
+      if (data && data.elements) {
+        try {
+          importState(data);
+          lastSentJSON = exportState();
+        } catch (e) { console.warn('Marquee editor: failed to re-sync after regaining focus', e); }
+      }
+    }).catch((e) => console.warn('Marquee editor: could not reach plugin backend to re-sync', e));
+  });
   // Best-effort — browsers don't guarantee an async fetch completes during
   // unload, but sendBeacon can't carry a same-origin JSON POST with this
   // content-type cleanly, so this is a "worth trying, not depended on"
