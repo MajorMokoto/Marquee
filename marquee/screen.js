@@ -26,7 +26,7 @@
     'use strict';
     const PLUGIN_ID = 'marquee';
     const INGEST_URL = `/api/plugins/${PLUGIN_ID}/ingest`;
-    const RESYNC_INTERVAL_MS = 500; // was 1000 — reported too slow to look smooth against a real 1-second tick
+    const RESYNC_INTERVAL_MS = 100; // was 500, before that 1000 — pushed as close to real-time as is reasonable over a local HTTP POST + WS fan-out without spamming needlessly (a real display refresh doesn't benefit from much faster than this)
 
     if (!window.feedBack || typeof window.feedBack.on !== 'function') {
         console.error('Marquee: window.feedBack not available, cannot wire live data.');

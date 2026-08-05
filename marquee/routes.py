@@ -48,31 +48,138 @@ _EMPTY_STATE = {
 # here so a fresh install (nobody's opened the editor / saved anything yet)
 # still renders something reasonable instead of an empty stage. Once anyone
 # saves via the editor, the on-disk file below always wins over this.
+# Canonical source for these values is assets/presets/standard.js (loaded
+# directly by editor.html/render.html) — Python can't execute a .js file,
+# so this dict has to be kept in sync with that file by hand whenever
+# Standard's defaults change.
 _DEFAULT_LAYOUT = {
     "version": 1,
-    "order": ["nowplaying", "tuning", "year", "path", "score", "info", "progress", "album", "art"],
+    "order": ["roll-1", "nowplaying", "tuning", "year", "path", "score", "album", "info", "progress", "art"],
     "elements": {
-        "nowplaying": {"x": 43.13099787785457, "y": 0, "width": 101.0521240234375, "height": 20, "fontSize": 16, "visible": True, "name": "Now Playing"},
-        "tuning": {"x": 33.46253908597506, "y": 29.703125000000004, "width": 78.46353149414062, "height": 45.00000762939453, "fontSize": 16, "visible": True, "name": "Tuning"},
-        "year": {"x": 48.55143326979417, "y": 29.700519561767578, "width": 47.833343505859375, "height": 45, "fontSize": 16, "visible": True, "name": "Year"},
-        "path": {"x": 57.74989788348858, "y": 29.700523376464844, "width": 76.41535949707031, "height": 45, "fontSize": 16, "visible": True, "name": "Path"},
-        "score": {"x": 72.44491577148438, "y": 0, "width": 143.2864227294922, "height": 104.40625, "fontSize": 20, "visible": True, "name": "Score"},
-        "info": {"x": 33.46153846153846, "y": 51.70312500000001, "width": 345.98960876464844, "height": 70.59375, "fontSize": 20, "visible": True, "name": "Song Title & Artist"},
-        "progress": {"x": 0, "y": 87, "width": 519.9947967529297, "height": 26, "fontSize": 20, "visible": True, "name": "Song Time"},
-        # New — Album, same .obj-stat shape as Tuning/Year/Path. Positioned
-        # in the previously-empty strip below Song Time (y 87-113) rather
-        # than overlapping any existing element.
-        "album": {"x": 33.46153846153846, "y": 120, "width": 100, "height": 45, "fontSize": 16, "visible": True, "name": "Album"},
-        "art": {"x": 0, "y": 0, "scale": 2.07142855844609, "visible": True, "name": "Album Art"},
+        "roll-1": {
+            "x": 33.46153846153846, "y": 28.999999999999996,
+            "width": 202.7109375, "height": 46.40625, "fontSize": 20, "visible": True,
+            "isRoll": True, "name": "Marquee Roll 1",
+            "useCustomStyles": True,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8400", "textColor": "#f3e9d8", "bold": False, "font": "Arial Black",
+                "borderWidth": 1.2, "edgeRounding": 0, "elementHeadSize": 10,
+                "marqueeScroll": True, "marqueeScrollSpeed": 60, "marqueeEdgeFade": True,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 1.5, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 132 0", "chipRgb": "0 0 0",
+            },
+        },
+        "nowplaying": {
+            "x": 33.46103374774639, "y": 0, "width": 202.72132873535156, "height": 57.99479675292969,
+            "fontSize": 16, "visible": True, "name": "Now Playing",
+            "useCustomStyles": True,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8200", "bold": False, "font": "Arial Black",
+                "borderWidth": 0, "edgeRounding": 0, "elementHeadSize": 19,
+                "marqueeScroll": False, "marqueeScrollSpeed": 10, "marqueeEdgeFade": False,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 1.5, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 130 0", "chipRgb": "0 0 0", "textColor": "#f3e9d8",
+            },
+        },
+        "tuning": {
+            "x": 33.46153846153846, "y": 29.5013033747673, "width": 78.46353149414062, "height": 45.00000762939453, "fontSize": 16, "visible": True, "name": "Tuning",
+            "useCustomStyles": False,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8200", "bold": False, "font": "Arial Black",
+                "borderWidth": 0, "edgeRounding": 0, "elementHeadSize": 10,
+                "marqueeScroll": False, "marqueeScrollSpeed": 10, "marqueeEdgeFade": False,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 1.5, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 130 0", "chipRgb": "0 0 0",
+            },
+            "rollGroup": "roll-1", "rollSlot": 1,
+        },
+        "year": {
+            "x": 48.55068280146672, "y": 29.5013033747673, "width": 47.833343505859375, "height": 45, "fontSize": 16, "visible": True, "name": "Year",
+            "useCustomStyles": False,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8200", "bold": False, "font": "Arial Black",
+                "borderWidth": 0, "edgeRounding": 0, "elementHeadSize": 10,
+                "marqueeScroll": False, "marqueeScrollSpeed": 10, "marqueeEdgeFade": False,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 1.5, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 130 0", "chipRgb": "0 0 0",
+            },
+            "rollGroup": "roll-1", "rollSlot": 1,
+        },
+        "path": {
+            "x": 57.74939977205717, "y": 29.5013033747673, "width": 76.41535949707031, "height": 45, "fontSize": 16, "visible": True, "name": "Path",
+            "useCustomStyles": False,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8200", "bold": False, "font": "Arial Black",
+                "borderWidth": 0, "edgeRounding": 0, "elementHeadSize": 10,
+                "marqueeScroll": False, "marqueeScrollSpeed": 10, "marqueeEdgeFade": False,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 1.5, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 130 0", "chipRgb": "0 0 0",
+            },
+            "rollGroup": "roll-1", "rollSlot": 1,
+        },
+        "score": {
+            "x": 72.44491577148438, "y": 0, "width": 143.2864227294922, "height": 104.40625, "fontSize": 20, "visible": True, "name": "Score",
+            "useCustomStyles": True,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8200", "bold": False, "font": "Arial Black",
+                "borderWidth": 1.2, "edgeRounding": 0, "elementHeadSize": 10,
+                "marqueeScroll": False, "marqueeScrollSpeed": 10, "marqueeEdgeFade": False,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 2.8, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 130 0", "chipRgb": "0 0 0",
+            },
+        },
+        "album": {
+            "x": 40.38461538461539, "y": 38.75, "width": 100, "height": 45, "fontSize": 16, "visible": True, "name": "Album",
+            "rollGroup": "roll-1", "rollSlot": 1,
+        },
+        "info": {
+            "x": 33.46153919513409, "y": 52.00130081176758, "width": 346, "height": 70, "fontSize": 20, "visible": True, "name": "Song Title & Artist",
+        },
+        "progress": {
+            "x": 0, "y": 87, "width": 519.9947967529297, "height": 26, "fontSize": 20, "visible": True, "name": "Song Time",
+            "useCustomStyles": True,
+            "styleOverrides": {
+                "chipColor": "#000000", "chipAlpha": 0, "accent": "#ff8200", "bold": False, "font": "Arial Black",
+                "borderWidth": 1.2, "edgeRounding": 0, "elementHeadSize": 10,
+                "marqueeScroll": False, "marqueeScrollSpeed": 10, "marqueeEdgeFade": False,
+                "marqueeSparkle": False, "marqueeSparkleSize": 4,
+                "marqueeBulbs": False, "marqueeBulbSize": 2.8, "marqueeBulbGap": 5, "marqueeBulbSpeedElements": 10,
+                "marqueeBulbScroll": False, "marqueeBulbFlicker": False, "marqueeBulbFlickerIntensity": 0,
+                "marqueeBulbFlickerRandom": False,
+                "accentRgb": "255 130 0", "chipRgb": "0 0 0",
+            },
+        },
+        "art": {
+            "x": 0, "y": 0, "scale": 2.0714286194698923, "visible": True, "name": "Album Art",
+        },
     },
     "visuals": {
         "accent": "#ff8200", "accentRgb": "255 130 0", "chipColor": "#000000", "chipRgb": "0 0 0",
-        "chipAlpha": 0, "borderWidth": 1, "bold": False, "font": "Arial Black",
+        "chipAlpha": 0, "borderWidth": 1.2, "bold": False, "font": "Arial Black", "textColor": "#f3e9d8",
         "stageWidth": 520, "stageHeight": 200, "canvasBgColor": "#000000", "canvasBgRgb": "0 0 0",
-        "canvasBgAlpha": 0, "elementHeadSize": 10, "edgeRounding": 0,
+        "canvasBgAlpha": 1, "elementHeadSize": 10, "edgeRounding": 0,
         # Seconds the whole stage takes to fade to/from invisible when
         # playback starts/stops — see render.html's fade handling.
         "fadeSeconds": 10,
+        "fadeEnabled": True,
         # Confetti — matching the editor's own defaultVisuals exactly.
         # Missing here (as it was before this comment existed) means
         # confettiEnabled reads as undefined, and fireConfetti()'s very
@@ -84,19 +191,21 @@ _DEFAULT_LAYOUT = {
         # anything's been fetched from the backend at all).
         "confettiEnabled": True,
         "confettiDuration": 7,
-        "confettiVolume": 0.1,
+        "confettiVolume": 0.5,
         "confettiTriggerAt": 100,
         "marqueeScroll": False,
-        "marqueeScrollSpeed": 80,
-        "marqueeEdgeFade": False,
+        "marqueeScrollSpeed": 10,
+        "marqueeEdgeFade": True,
         "marqueeSparkle": False,
-        "marqueeSparkleSize": 10,
+        "marqueeSparkleSize": 4,
         "marqueeBulbMode": "off",
-        "marqueeBulbSize": 2.8,
-        "marqueeBulbGap": 11,
-        "marqueeBulbScroll": True,
+        "marqueeBulbSize": 1.5,
+        "marqueeBulbGap": 5,
+        "marqueeBulbSpeedElements": 10,
+        "marqueeBulbSpeedLayout": 10,
+        "marqueeBulbScroll": False,
         "marqueeBulbFlicker": False,
-        "marqueeBulbFlickerIntensity": 0.6,
+        "marqueeBulbFlickerIntensity": 0,
         "marqueeBulbFlickerRandom": False,
     },
 }
@@ -318,6 +427,37 @@ def setup(app: FastAPI, context: dict):
         if not target.is_file():
             return Response("editor.html missing", status_code=404)
         return HTMLResponse(target.read_text(encoding="utf-8"))
+
+    @app.get(f"/api/plugins/{PLUGIN_ID}/render-core.js")
+    def render_core_js():
+        # Shared ticker/roll rendering engine used by BOTH editor.html's
+        # canvas preview and render.html's actual OBS output — the single
+        # source of truth these two pages were previously reimplementing
+        # independently (and drifting out of sync with each other). See
+        # render-core.js's own header comment.
+        target = _ASSETS_DIR / "render-core.js"
+        if not target.is_file():
+            return Response("render-core.js missing", status_code=404)
+        return Response(target.read_text(encoding="utf-8"), media_type="application/javascript")
+
+    @app.get(f"/api/plugins/{PLUGIN_ID}/presets/{{filename}}")
+    def preset_asset(filename: str):
+        # One generic route for every file under assets/presets/ — each of
+        # editor.html's 11 presets (Standard, Small, Tall, User, the four
+        # RockSniffer variants, CraftyGirls, TheMarquee, UserOff) is its own
+        # <script src="presets/xxx.js"> loaded straight off disk here,
+        # instead of a hand-written route per file (the render-core.js/
+        # cover.jpg pattern above) — adding a 12th preset later needs only
+        # a new file, no routes.py change. filename comes straight from the
+        # URL, so reject anything that isn't a bare filename before it ever
+        # touches the filesystem.
+        if "/" in filename or "\\" in filename or filename.startswith("."):
+            return Response(status_code=404)
+        target = _ASSETS_DIR / "presets" / filename
+        if not target.is_file():
+            return Response(status_code=404)
+        media_type = "application/javascript" if filename.endswith(".js") else "application/octet-stream"
+        return Response(target.read_text(encoding="utf-8"), media_type=media_type)
 
     @app.get(f"/api/plugins/{PLUGIN_ID}/cover.jpg")
     def cover_image():
