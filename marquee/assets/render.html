@@ -608,8 +608,12 @@
     font-size: 1.65em;
     line-height: 1.05;
     /* See MarqueeCore.applyScoreColor's own comment (render-core.js) —
-       falls back to plain --accent before the first score update lands. */
-    color: var(--score-color, var(--accent));
+       falls back to plain --accent before the first score update lands.
+       --text-color-override (see applyElementStyleOverrides' own comment,
+       render-core.js) beats both — set only when Score has its own
+       Customize-tab Text Color override, deliberately NOT Global's plain
+       text color. */
+    color: var(--text-color-override, var(--score-color, var(--accent)));
   }
   .stat-value-prev {
     /* Disabled per request (2026-07-20), alongside the val-prev JS below

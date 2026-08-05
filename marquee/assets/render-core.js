@@ -259,8 +259,22 @@
     }
     if ('textColor' in ov) {
       el.style.setProperty('--text-color', ov.textColor);
+      // Separate from --text-color on purpose: Global's own plain text
+      // color is ALSO delivered through --text-color (set at the root,
+      // inherited down), so a rule can't tell "this is the global
+      // default" from "this element has a real per-element override"
+      // just by reading --text-color — both look identical. Score's own
+      // color rule (.stat-value-percent) needs exactly that distinction:
+      // it's intentionally bound to --accent/the gradient rather than
+      // --text-color, and Global's text color was never meant to touch
+      // it — only an explicit Customize-tab override for Score
+      // specifically should be able to beat the gradient/accent. This
+      // var only ever gets set here, so its mere presence IS "a real
+      // override exists."
+      el.style.setProperty('--text-color-override', ov.textColor);
     } else {
       el.style.removeProperty('--text-color');
+      el.style.removeProperty('--text-color-override');
     }
     if ('headerTextColor' in ov) {
       el.style.setProperty('--header-text-color', ov.headerTextColor);

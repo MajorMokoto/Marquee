@@ -1525,8 +1525,11 @@
     /* --score-color is set live (see MarqueeCore.applyScoreColor) as the
        accuracy reading changes — red/amber/green gradient, bad to good.
        Falls back to plain --accent before the first score update ever
-       lands (or if JS somehow never runs), so this never renders unstyled. */
-    color: var(--score-color, var(--accent));
+       lands (or if JS somehow never runs), so this never renders unstyled.
+       --text-color-override (see applyElementStyleOverrides' own comment)
+       beats both — set only when Score has its own Customize-tab Text
+       Color override, deliberately NOT by Global's plain text color. */
+    color: var(--text-color-override, var(--score-color, var(--accent)));
     /* Used to have an accent-colored text-shadow glow here too, same as
        .title's (already removed) — still visible as a faint background-y
        smear even at full opacity/no transparency, since it's a glow
@@ -1742,10 +1745,25 @@
      card) — see its own markup comment for why it lives here instead of
      inside either tab. */
   .settings-tabs-note {
+    display: block;
+    width: 100%;
+    text-align: left;
     font-size: 14px;
+    font-family: inherit;
     color: var(--vs-text-dim);
     margin: 0 0 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
   }
+  .settings-tabs-note:hover { color: #fff; }
+  /* While already on Customize, clicking this note would just re-select
+     the already-active tab — harmless, but the hover highlight still
+     read as "this does something" when it doesn't. Applied by the
+     Customize tab-click handler, removed by Global's. */
+  .settings-tabs-note.is-inert { cursor: default; pointer-events: none; }
+  .settings-tabs-note.is-inert:hover { color: var(--vs-text-dim); }
   /* One row per OVERRIDABLE_SETTINGS entry, built in
      renderCustomizeSettingRows() — label, then the control itself.
      Whether the control is live or just mirroring Global (disabled) is
@@ -2336,6 +2354,7 @@
      click handler. */
   #visualSettingsPanel .customize-enable-band {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
@@ -2349,6 +2368,19 @@
     font-size: 0.85rem;
     color: #fff;
     cursor: pointer;
+  }
+  /* Separates the "Enable Customizations" toggle from the element
+     picker/reset group sharing this same band — same line, but reads as
+     two distinct clusters instead of five items in a row. */
+  #visualSettingsPanel .customize-enable-band-select-label {
+    margin-left: 16px;
+  }
+  /* Pushed to the far right of the shared band, separate from the "Reset
+     to Global" button right next to it (single-element vs. every-element
+     — different enough consequences to want a visible gap, not just
+     sitting flush against it). */
+  #visualSettingsPanel .customize-reset-all-btn {
+    margin-left: auto;
   }
   /* Attention flash — clicking a disabled row (customization off) flashes
      this band red, same remove+reflow+re-add pattern as .lock-flash
@@ -2952,6 +2984,7 @@
         <option value="Tall">Tall</option>
         <option value="TheMarquee">The Marquee</option>
         <option value="UserOff">USER</option>
+        <option value="Test">TEST</option>
         <!-- Rocksniffer/v1-3 temporarily hidden from the list (not deleted —
              PRESETS.Rocksniffer/RocksnifferV1-3 below are untouched, just
              unreachable from this dropdown until they're revisited). -->
@@ -3058,7 +3091,14 @@
        above the first settings-section card — deliberately NOT inside a
        card, so it reads as a note about the tab selection itself (Global
        vs. Customize) rather than a setting belonging to either tab. -->
-  <p class="settings-tabs-note" id="settingsTabsNote">Global settings do not overwrite customize settings. Presets have some enabled customizations.</p>
+  <!-- Plain text, not a red/bordered callout — folds the live override
+       count right into the existing note instead of a separate badge
+       (an earlier version was a standalone red-bordered element; per
+       request that read as too loud for something that's always
+       visible). Real <button> so it stays clickable — while on Global,
+       jumps straight to Customize. See refreshCustomizeOverrideBadge for
+       what keeps its text in sync. -->
+  <button type="button" class="settings-tabs-note" id="settingsTabsNote">Global settings do not overwrite customize settings. Presets have some enabled customizations.</button>
   <div id="globalSettingsTab" role="tabpanel">
   <div class="settings-section">
     <p class="settings-section-title">Layout &amp; Canvas:</p>
@@ -3466,13 +3506,12 @@
     <div class="customize-enable-band" id="customizeEnableBand">
       <label for="customizeEnableToggle">Enable Customizations:</label>
       <input type="checkbox" id="customizeEnableToggle" class="vs-checkbox" aria-label="Use this element's own custom settings instead of Global" />
-    </div>
-    <div class="control-row inline">
-      <label for="customizeElementSelect">Select Element to Customize:</label>
+      <label for="customizeElementSelect" class="customize-enable-band-select-label">Select Element to Customize:</label>
       <div class="arrowed-select-wrap">
         <select id="customizeElementSelect" class="arrowed-select" aria-label="Which element's settings to customize"></select>
       </div>
       <button class="load-fonts-btn" id="customizeResetBtn" type="button" title="Discard every custom value for this one element, back to Global">Reset to Global</button>
+      <button class="load-fonts-btn customize-reset-all-btn" id="customizeResetAllBtn" type="button" title="Discard every custom value for EVERY element, back to Global">Reset All</button>
     </div>
     <div id="customizeSettingsRows"></div>
   </div>
@@ -3535,7 +3574,7 @@
        of the page for as long as anything stays collapsed; per request,
        that's the accepted tradeoff for never pulling the view upward. -->
   <div id="settingsCollapseSpacer" aria-hidden="true" style="height:0;flex-shrink:0;transition:height 0.25s ease;"></div>
-  <script src="render-core.js"></script><script src="presets/standard.js"></script><script src="presets/small.js"></script><script src="presets/tall.js"></script><script src="presets/user.js"></script><script src="presets/rocksniffer-v1.js"></script><script src="presets/rocksniffer-v2.js"></script><script src="presets/rocksniffer-v3.js"></script><script src="presets/rocksniffer-v4.js"></script><script src="presets/crafty-girls.js"></script><script src="presets/the-marquee.js"></script><script src="presets/user-off.js"></script><script>
+  <script src="render-core.js"></script><script src="presets/standard.js"></script><script src="presets/small.js"></script><script src="presets/tall.js"></script><script src="presets/user.js"></script><script src="presets/rocksniffer-v1.js"></script><script src="presets/rocksniffer-v2.js"></script><script src="presets/rocksniffer-v3.js"></script><script src="presets/rocksniffer-v4.js"></script><script src="presets/crafty-girls.js"></script><script src="presets/the-marquee.js"></script><script src="presets/user-off.js"></script><script src="presets/test.js"></script><script>
   // ============================================================
   // 1. DOM refs + state
   // ============================================================
@@ -3744,6 +3783,7 @@
     // (Global's value vs. whatever got seeded/restored into ov) — see
     // resyncElementBulbDelay's own comment.
     MarqueeCore.resyncElementBulbDelay(id, layout, visuals);
+    refreshCustomizeOverrideBadge();
   }
   // Turns customization OFF without discarding the values — flipping
   // back on (above) restores them rather than starting from scratch.
@@ -3755,6 +3795,7 @@
     MarqueeCore.applyDecorativeBulbs(layout, visuals);
     setupAllTickers();
     MarqueeCore.resyncElementBulbDelay(id, layout, visuals);
+    refreshCustomizeOverrideBadge();
   }
   function setElementOverrideValue(id, key, value) {
     if (!layout[id] || !layout[id].styleOverrides) return;
@@ -3793,6 +3834,7 @@
     MarqueeCore.applyDecorativeBulbs(layout, visuals);
     setupAllTickers();
     MarqueeCore.resyncElementBulbDelay(id, layout, visuals);
+    refreshCustomizeOverrideBadge();
   }
   // Presets — each has two snapshots:
   // - default: fixed, only ever changed by editing this object in code.
@@ -3905,6 +3947,14 @@
       order: Object.keys(userOffDefaultLayout),
     };
     PRESETS.UserOff = { default: userOffDef, current: clonePresetSnapshot(userOffDef) };
+  }
+  {
+    const testDef = {
+      layout: JSON.parse(JSON.stringify(testDefaultLayout)),
+      visuals: JSON.parse(JSON.stringify(testDefaultVisuals)),
+      order: Object.keys(testDefaultLayout),
+    };
+    PRESETS.Test = { default: testDef, current: clonePresetSnapshot(testDef) };
   }
   const presetSelect = document.getElementById('presetSelect');
   // Tracks which preset was selected before a 'change' event, so switching
@@ -4742,14 +4792,19 @@
       visuals.marqueeBulbScrollLayout = v.marqueeBulbScrollLayout;
       document.getElementById('marqueeBulbScrollLayout').checked = v.marqueeBulbScrollLayout;
     }
-    if (typeof v.marqueeBulbScrollClockwise === 'boolean') {
-      visuals.marqueeBulbScrollClockwise = v.marqueeBulbScrollClockwise;
-      document.getElementById('marqueeBulbScrollClockwise').checked = v.marqueeBulbScrollClockwise;
-    }
-    if (typeof v.marqueeBulbScrollClockwiseLayout === 'boolean') {
-      visuals.marqueeBulbScrollClockwiseLayout = v.marqueeBulbScrollClockwiseLayout;
-      document.getElementById('marqueeBulbScrollClockwiseLayout').checked = v.marqueeBulbScrollClockwiseLayout;
-    }
+    // Unconditional (not `if (typeof v.X === 'boolean')`) on purpose, same
+    // as fadeEnabled above — neither Clockwise checkbox is seeded in any
+    // preset file (see [[marquee-score-gradient-export-gap]]), so a
+    // conditional-only assignment would leave whichever preset/preset
+    // switch/Reset-to-Defaults doesn't declare it just keeping whatever
+    // value happened to be left over from a DIFFERENT preset, instead of
+    // genuinely resetting to off. Explicit default false covers both
+    // "this preset never had it" and "old export from before this
+    // setting existed" the same way.
+    visuals.marqueeBulbScrollClockwise = typeof v.marqueeBulbScrollClockwise === 'boolean' ? v.marqueeBulbScrollClockwise : false;
+    document.getElementById('marqueeBulbScrollClockwise').checked = visuals.marqueeBulbScrollClockwise;
+    visuals.marqueeBulbScrollClockwiseLayout = typeof v.marqueeBulbScrollClockwiseLayout === 'boolean' ? v.marqueeBulbScrollClockwiseLayout : false;
+    document.getElementById('marqueeBulbScrollClockwiseLayout').checked = visuals.marqueeBulbScrollClockwiseLayout;
     if (typeof v.marqueeBulbFlicker === 'boolean') {
       visuals.marqueeBulbFlicker = v.marqueeBulbFlicker;
       document.getElementById('marqueeBulbFlicker').checked = v.marqueeBulbFlicker;
@@ -4790,9 +4845,14 @@
       });
       document.getElementById('accentColorPicker').value = v.accent;
     }
-    if (typeof v.marqueeScoreColorGradient === 'boolean') {
-      visuals.marqueeScoreColorGradient = v.marqueeScoreColorGradient;
-      document.getElementById('scoreColorGradient').checked = v.marqueeScoreColorGradient;
+    // Unconditional, same reasoning as the two Clockwise checkboxes above
+    // — not seeded in any preset file, so needs an explicit default
+    // rather than leaving a previous preset's leftover value in place.
+    visuals.marqueeScoreColorGradient = typeof v.marqueeScoreColorGradient === 'boolean' ? v.marqueeScoreColorGradient : false;
+    document.getElementById('scoreColorGradient').checked = visuals.marqueeScoreColorGradient;
+    {
+      const customizeCheckbox = document.getElementById('customize-scoreColorGradient');
+      if (customizeCheckbox) customizeCheckbox.checked = visuals.marqueeScoreColorGradient;
     }
     // canvasBgRgb is deliberately NOT imported directly — always derived
     // fresh from canvasBgColor via MarqueeCore.hexToRgbChannels() below, so the two
@@ -5683,6 +5743,23 @@
     select.value = elementOrder.includes(prev) ? prev : (elementOrder[0] || '');
     syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
+    refreshCustomizeOverrideBadge();
+  }
+  // Keeps the Global tab's note (settingsTabsNote) showing a live count of
+  // how many elements currently have Customize overrides on — folded into
+  // the existing static sentence rather than a separate badge (an earlier
+  // version was its own red-bordered callout; per request that read as
+  // too loud for something that's always on screen). Global-tab-only:
+  // the Customize tab's own text ('Customize settings enabled per
+  // element.', set directly in its own tab-click handler) is a different,
+  // fixed sentence and isn't touched here.
+  function refreshCustomizeOverrideBadge() {
+    const note = document.getElementById('settingsTabsNote');
+    if (!note) return;
+    const onGlobalTab = document.getElementById('settingsTabGlobalBtn').classList.contains('active');
+    if (!onGlobalTab) return;
+    const count = elementOrder.filter((id) => layout[id] && layout[id].useCustomStyles).length;
+    note.textContent = 'Global settings do not overwrite customize settings. ' + count + ' elements have Customized overrides enabled.';
   }
   // Mirrors the CURRENTLY SELECTED element's own useCustomStyles flag
   // onto the one shared toggle — called whenever the selected element
@@ -6482,6 +6559,26 @@
     collapsedSectionTitles[nowCollapsed ? 'add' : 'delete'](key);
     section.classList.toggle('collapsed', nowCollapsed);
     if (rows) setSectionRowsCollapsed(rows, nowCollapsed);
+    // The other tab's same-titled card isn't visible right now, so it never
+    // gets a click of its own — without this it silently falls out of sync
+    // with collapsedSectionTitles (only this section's DOM was just
+    // updated above), which then causes a "takes two clicks" bug the next
+    // time that other tab's card IS clicked directly (its stale DOM state
+    // doesn't match what the Set thinks already happened). Sync it here,
+    // instantly (no animation, no scroll-pin/spacer dance) since it's
+    // off-screen and none of that matters until it's shown again.
+    const otherContainer = section.closest('#globalSettingsTab')
+      ? document.getElementById('customizeSettingsTab')
+      : document.getElementById('globalSettingsTab');
+    if (otherContainer) {
+      otherContainer.querySelectorAll('.settings-section').forEach((otherSection) => {
+        const otherTitle = otherSection.querySelector('.settings-section-title');
+        if (!otherTitle || otherTitle.textContent !== key) return;
+        otherSection.classList.toggle('collapsed', nowCollapsed);
+        const otherRows = otherSection.querySelector('.settings-section-rows');
+        if (otherRows) otherRows.style.maxHeight = nowCollapsed ? '0px' : '';
+      });
+    }
   });
   // Shared by both places custom text can be edited — the Custom Text
   // list's own field, and (redundantly, on purpose — the user asked for
@@ -7416,7 +7513,8 @@
   // (below) reads visuals.marqueeScoreColorGradient fresh every frame, so
   // flipping this just needs to update the value; the next frame (or the
   // real score update path in render.html) picks it up on its own.
-  document.getElementById('scoreColorGradient').addEventListener('input', (e) => {
+  const scoreColorGradientCheckbox = document.getElementById('scoreColorGradient');
+  scoreColorGradientCheckbox.addEventListener('input', (e) => {
     visuals.marqueeScoreColorGradient = e.target.checked;
     // Keep the Customize tab's own redundant copy of this checkbox (only
     // present while Score is the selected element — see
@@ -7425,6 +7523,15 @@
     const customizeCheckbox = document.getElementById('customize-scoreColorGradient');
     if (customizeCheckbox) customizeCheckbox.checked = e.target.checked;
   });
+  // No preset file seeds marqueeScoreColorGradient (it's never been part
+  // of any defaultVisuals — see [[marquee-score-gradient-export-gap]] in
+  // project memory), so without this, visuals.marqueeScoreColorGradient
+  // stays undefined — and thus silently missing from exportState()'s
+  // JSON.stringify — until this checkbox is manually clicked at least
+  // once. The checkbox's own current .checked IS the true current state
+  // regardless of whether anyone's touched it, so read that directly
+  // right now instead of waiting for a change event that may never come.
+  visuals.marqueeScoreColorGradient = scoreColorGradientCheckbox.checked;
   fontPicker.addEventListener('change', () => applyOverlayFont(fontPicker.value));
   // Shared by Global's own Load System Fonts button and Customize's
   // (renderCustomizePlainRow's font branch) — one Local Font Access
@@ -7549,14 +7656,22 @@
   // clockwise class is set unconditionally on every setBulbLoop() call
   // (see its own comment there) — no special resync needed, same as
   // marqueeBulbScroll on/off above.
-  document.getElementById('marqueeBulbScrollClockwise').addEventListener('change', (e) => {
+  const marqueeBulbScrollClockwiseCheckbox = document.getElementById('marqueeBulbScrollClockwise');
+  marqueeBulbScrollClockwiseCheckbox.addEventListener('change', (e) => {
     visuals.marqueeBulbScrollClockwise = e.target.checked;
     setupAllTickers();
   });
-  document.getElementById('marqueeBulbScrollClockwiseLayout').addEventListener('change', (e) => {
+  const marqueeBulbScrollClockwiseLayoutCheckbox = document.getElementById('marqueeBulbScrollClockwiseLayout');
+  marqueeBulbScrollClockwiseLayoutCheckbox.addEventListener('change', (e) => {
     visuals.marqueeBulbScrollClockwiseLayout = e.target.checked;
     setupAllTickers();
   });
+  // Same export gap as marqueeScoreColorGradient above (see
+  // [[marquee-score-gradient-export-gap]]) — neither Clockwise checkbox
+  // is seeded in any preset file, so read their real current DOM state
+  // directly right now rather than waiting on a change event.
+  visuals.marqueeBulbScrollClockwise = marqueeBulbScrollClockwiseCheckbox.checked;
+  visuals.marqueeBulbScrollClockwiseLayout = marqueeBulbScrollClockwiseLayoutCheckbox.checked;
   document.getElementById('marqueeBulbFlicker').addEventListener('change', (e) => {
     visuals.marqueeBulbFlicker = e.target.checked;
     setupAllTickers();
@@ -7658,7 +7773,8 @@
     settingsTabCustomizeBtn.setAttribute('aria-selected', 'false');
     globalSettingsTabEl.style.display = '';
     customizeSettingsTabEl.style.display = 'none';
-    settingsTabsNote.textContent = 'Global settings do not overwrite customize settings. Presets have some enabled customizations.';
+    settingsTabsNote.classList.remove('is-inert');
+    refreshCustomizeOverrideBadge();
   });
   settingsTabCustomizeBtn.addEventListener('click', () => {
     settingsTabCustomizeBtn.classList.add('active');
@@ -7668,8 +7784,17 @@
     customizeSettingsTabEl.style.display = '';
     globalSettingsTabEl.style.display = 'none';
     settingsTabsNote.textContent = 'Customize settings enabled per element.';
+    settingsTabsNote.classList.add('is-inert');
     syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
+  });
+  // The note doubles as a shortcut to Customize while on Global — reading
+  // "N elements have overrides" and then having to separately go hunt for
+  // the Customize tab button would be an odd extra step. pointer-events
+  // is turned off (see .is-inert) once already on Customize, so this
+  // never actually fires there.
+  settingsTabsNote.addEventListener('click', () => {
+    settingsTabCustomizeBtn.click();
   });
   document.getElementById('customizeElementSelect').addEventListener('change', () => {
     syncCustomizeEnableToggle();
@@ -7749,13 +7874,28 @@
   // container (rebuilt fresh on every renderCustomizeSettingRows() call)
   // rather than per-row, so it keeps working across rebuilds with no
   // re-wiring needed.
-  document.getElementById('customizeSettingsRows').addEventListener('click', () => {
+  document.getElementById('customizeSettingsRows').addEventListener('click', (e) => {
+    // Opening/closing a group card (.settings-section-title) bubbles up
+    // through this same container — without this guard, collapsing a
+    // group while customization is off flashed the band every time, even
+    // though collapse/expand isn't a disabled setting at all.
+    if (e.target.closest('.settings-section-title')) return;
     const id = document.getElementById('customizeElementSelect').value;
     if (id && !(layout[id] && layout[id].useCustomStyles)) flashCustomizeEnableBand();
   });
   document.getElementById('customizeResetBtn').addEventListener('click', () => {
     const id = document.getElementById('customizeElementSelect').value;
     if (id) resetElementToGlobal(id);
+    syncCustomizeEnableToggle();
+    renderCustomizeSettingRows();
+  });
+  // Same hard clear as Reset to Global above, just run across every
+  // element in the layout instead of only the one currently selected in
+  // the dropdown — resetElementToGlobal already no-ops safely on ids with
+  // nothing to reset, so this doesn't need its own "was it actually
+  // customized" check first.
+  document.getElementById('customizeResetAllBtn').addEventListener('click', () => {
+    Object.keys(layout).forEach((id) => resetElementToGlobal(id));
     syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
   });
