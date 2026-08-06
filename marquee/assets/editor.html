@@ -664,6 +664,40 @@
   .delete-preset-btn:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
   .delete-preset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .delete-preset-btn:disabled:hover { border-color: var(--vs-border); color: #f2f2f2; }
+  /* Save As' name-entry dialog — see its own HTML comment for why this
+     exists instead of window.prompt(). Plain fixed-overlay modal, same
+     card look (--vs-card-bg/--vs-border) as everything else in this
+     toolbar/panel, not a new visual language. */
+  .preset-name-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .preset-name-modal {
+    background: var(--vs-card-bg);
+    border: 1px solid var(--vs-border);
+    border-radius: 10px;
+    padding: 20px;
+    width: min(360px, calc(100vw - 40px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .preset-name-modal-title {
+    margin: 0;
+    color: #f2f2f2;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .preset-name-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
   /* Reset to Defaults' icon — a plain unicode glyph rather than a
      hand-drawn CSS shape, same precedent as .preset-static-label's ▾
      arrows (a hand-drawn CSS arc+arrowhead was tried first but replaced
@@ -3205,7 +3239,28 @@
     <button class="reset-btn delete-preset-btn" id="deletePresetBtn" type="button">
       <span>Delete Preset</span>
     </button>
-  </div></div><div class="drag-hint" id="dragHint">
+  </div>
+  <!-- Save As' own name-entry dialog — NOT window.prompt(). Reported live:
+       inside FeedBack's embedded editor (an Electron renderer), Delete
+       Preset's window.confirm() works fine (Electron implements
+       confirm/alert as native dialogs) but Save As' window.prompt() did
+       nothing at all when clicked — Electron has never implemented
+       prompt(), it just silently no-ops. Worked fine in a plain browser
+       tab, which is what made this easy to miss originally. This overlay
+       is real in-page markup instead, so it works identically everywhere
+       the editor runs. See promptForPresetName() near Save As' click
+       handler for the actual open/resolve logic. -->
+  <div class="preset-name-modal-overlay" id="presetNameModalOverlay" style="display:none;">
+    <div class="preset-name-modal">
+      <p class="preset-name-modal-title">Save the current stage as a new preset</p>
+      <input type="text" class="text-input" id="presetNameModalInput" placeholder="Preset name" maxlength="60" />
+      <div class="preset-name-modal-actions">
+        <button type="button" class="load-fonts-btn" id="presetNameModalCancel">Cancel</button>
+        <button type="button" class="load-fonts-btn" id="presetNameModalSave">Save</button>
+      </div>
+    </div>
+  </div>
+  </div><div class="drag-hint" id="dragHint">
   <p>This is your stage as it will be sent out. Change stage size and other visuals below:</p>
   <p>Click to move/resize any element in the stage panel below:</p></div><div class="stage" id="stage">
   <div class="stage-bg" aria-hidden="true"></div>
@@ -8961,9 +9016,46 @@
     deletePresetBtn.title = deletePresetBtn.disabled ? 'At least one preset must remain' : '';
   }
   presetSelect.addEventListener('change', updateDeletePresetBtnState);
+  // window.prompt() replacement — see the modal's own HTML comment for
+  // why: it's a no-op inside FeedBack's embedded Electron editor (reported
+  // live: Save As did nothing there, while Delete Preset's window.confirm
+  // worked fine). Resolves to the typed, un-trimmed name, or null if
+  // cancelled/closed — same contract window.prompt() had, so the caller
+  // below barely changes.
+  const presetNameModalOverlay = document.getElementById('presetNameModalOverlay');
+  const presetNameModalInput = document.getElementById('presetNameModalInput');
+  const presetNameModalCancel = document.getElementById('presetNameModalCancel');
+  const presetNameModalSave = document.getElementById('presetNameModalSave');
+  function promptForPresetName() {
+    return new Promise((resolve) => {
+      if (!presetNameModalOverlay || !presetNameModalInput || !presetNameModalCancel || !presetNameModalSave) {
+        resolve(null);
+        return;
+      }
+      presetNameModalInput.value = '';
+      presetNameModalOverlay.style.display = 'flex';
+      presetNameModalInput.focus();
+      function cleanup(result) {
+        presetNameModalOverlay.style.display = 'none';
+        presetNameModalCancel.removeEventListener('click', onCancel);
+        presetNameModalSave.removeEventListener('click', onSave);
+        presetNameModalInput.removeEventListener('keydown', onKeydown);
+        resolve(result);
+      }
+      function onCancel() { cleanup(null); }
+      function onSave() { cleanup(presetNameModalInput.value); }
+      function onKeydown(e) {
+        if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+        else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      }
+      presetNameModalCancel.addEventListener('click', onCancel);
+      presetNameModalSave.addEventListener('click', onSave);
+      presetNameModalInput.addEventListener('keydown', onKeydown);
+    });
+  }
   if (savePresetBtn) {
-    savePresetBtn.addEventListener('click', () => {
-      const name = window.prompt('Save the current stage as a new preset. Name it:', '');
+    savePresetBtn.addEventListener('click', async () => {
+      const name = await promptForPresetName();
       if (name === null) return;
       const trimmed = name.trim();
       if (!trimmed) return;
