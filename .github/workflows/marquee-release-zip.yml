@@ -1,0 +1,52 @@
+name: Marquee release zip
+
+# Fires automatically the moment a GitHub Release is published (not on the
+# tag push itself — a tag is normally pushed a step BEFORE `gh release
+# create` runs, so triggering on the tag would risk this running before
+# the release actually exists to attach a file to). This already happens
+# for every Marquee release cut, so nothing extra needs to be typed or
+# clicked. Builds the same marquee/<files> zip previously built and
+# uploaded by hand for v0.1.0/v0.2.0, and attaches it to that release as
+# "Marquee.zip".
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-attach-zip:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Editor-only setting: every settings-group card starts collapsed on
+      # first load, which nudges a new user into discovering they're
+      # expandable — deliberately left OFF in the committed source so
+      # everyday dev/testing isn't stuck re-opening every card on each
+      # reload, and turned ON only for the packaged release zip itself.
+      # See its own comment in marquee/assets/editor.html for the full
+      # reasoning (search COLLAPSE_SETTINGS_BY_DEFAULT).
+      - name: Enable release-mode default (collapsed settings groups)
+        run: |
+          sed -i 's/const COLLAPSE_SETTINGS_BY_DEFAULT = false;/const COLLAPSE_SETTINGS_BY_DEFAULT = true;/' marquee/assets/editor.html
+
+      # Zip must contain a top-level marquee/ folder (not its contents
+      # loose) so the drag-and-drop install instructions in the release
+      # notes/README work as written. design/ (FeedBack host-app design
+      # reference material, not part of the plugin itself) and any Python
+      # bytecode cache are excluded — matches what actually shipped in
+      # v0.1.0's hand-built Marquee.zip.
+      - name: Build Marquee.zip
+        run: |
+          mkdir -p dist
+          zip -r dist/Marquee.zip marquee \
+            -x "marquee/design/*" \
+            -x "marquee/__pycache__/*" \
+            -x "marquee/**/__pycache__/*" \
+            -x "marquee/**/*.pyc"
+
+      - name: Attach zip to the GitHub Release that just published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/Marquee.zip --repo "${{ github.repository }}" --clobber
