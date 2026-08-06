@@ -127,7 +127,14 @@
     position: relative;
     width: min(var(--stage-w-px), 94vw);
     aspect-ratio: var(--stage-ratio);
-    border-radius: var(--edge-rounding);
+    /* Same override-first fallback chain as .stage::after's own border-
+       radius below — this is the box whose overflow:hidden actually
+       clips the stage's real content, so leaving it on the plain global
+       --edge-rounding meant the Stage Customize override could zero the
+       visible border ring's rounding while the actual OBS output stayed
+       clipped by the GLOBAL value regardless. See editor.html's matching
+       fix/comment on its own .stage rule. */
+    border-radius: var(--stage-edge-rounding-override, var(--edge-rounding));
     overflow: hidden;
     background: transparent;
     /* Drop shadow only now — the layout-wide border ring moved to
@@ -200,14 +207,14 @@
     inset: 0;
     z-index: 10001;
     pointer-events: none;
-    border: var(--border-width) solid var(--accent);
-    border-radius: var(--edge-rounding);
+    border: var(--stage-border-width-override, var(--border-width)) solid var(--stage-accent-override, var(--accent));
+    border-radius: var(--stage-edge-rounding-override, var(--edge-rounding));
   }
   .stage-canvas-bg {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-color: rgb(var(--canvas-bg-rgb) / var(--canvas-bg-alpha));
+    background-color: rgb(var(--stage-canvas-bg-rgb-override, var(--canvas-bg-rgb)) / var(--stage-canvas-bg-alpha-override, var(--canvas-bg-alpha)));
   }
 
   .obj {
@@ -273,7 +280,11 @@
      everywhere else. */
   .obj-art::after { border-width: calc(var(--border-width) / var(--art-scale, 1)); }
 
-  .obj-art { width: 84px; height: 84px; padding: 1px; }
+  /* overflow:hidden so Edge Rounding actually crops the <img> itself —
+     .obj's own border-radius (inherited via var(--edge-rounding)) rounds
+     the box's background/border fine on its own, but a child <img> isn't
+     clipped by an ancestor's border-radius unless overflow is set. */
+  .obj-art { width: 84px; height: 84px; padding: 1px; overflow: hidden; }
   .obj-art .art-img {
     width: 100%; height: 100%; object-fit: cover; display: block;
     -webkit-user-drag: none;
@@ -285,8 +296,12 @@
   .obj-art .art-frame-line { position: absolute; inset: 4px; border: 1px solid rgba(243, 233, 216, 0.25); pointer-events: none; }
 
   .obj-info { width: max-content; }
+  /* Was hardcoded to 900 (the CSS max) — meant Bold could never have any
+     visible effect on the Title specifically, since it was already
+     pinned at the heaviest possible weight regardless of the toggle. See
+     editor.html's matching fix/comment on its own .title rule. */
   .title {
-    margin: 0 0 3px; font-weight: 900;
+    margin: 0 0 3px; font-weight: 700;
     font-size: 1.2em; line-height: 1.15; color: var(--text-color); letter-spacing: -0.01em;
   }
   /* Was var(--paper-dim) — a fixed editor-chrome color untouched by the
@@ -634,7 +649,13 @@
      flush against .obj-progress's own edge — the box only has 1px of its
      own padding (see .obj), not enough room before the border ring, so the
      time text was getting visually clipped/crowded against it. */
-  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; padding: 0 6px; }
+  /* Was hardcoded to var(--paper-dim) — a fixed editor-chrome color never
+     touched by the Text Color control (global OR per-element override),
+     so Song Time's digits silently ignored it entirely while every other
+     text element's color worked fine. Reads --text-color now, same as
+     .title/.artist/.stat-value/.custom-text. See editor.html's matching
+     fix/comment on its own .time rule. */
+  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--text-color); font-weight: 600; flex: 0 1 auto; min-width: 0; padding: 0 6px; }
   .progress-track { flex: 1; height: 3px; background: rgba(243, 233, 216, 0.14); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--bulb-hot)); transition: width 0.2s linear; }
 
@@ -668,11 +689,10 @@
     will-change: transform;
   }
 
-  /* No synthetic bold/italic, anywhere — see editor.html's matching
-     comment. Removed per direct request (2026-08-05): a font with no real
-     bold/italic face now does nothing visually instead of the browser (or
-     the old -webkit-text-stroke trick) faking one. */
-  .obj, .obj * { font-synthesis: none !important; }
+  /* Synthetic bold/italic ALLOWED again — see editor.html's matching
+     comment (reversed 2026-08-06). Browser default (font-synthesis: auto,
+     the plain absence of this property) lets it fake a heavier weight/
+     oblique slant for a font with no real bold/italic face. */
   /* Scoped to .obj AND every descendant (the trailing `*`), not a list of
      specific text-class names. font-weight etc. are inherited properties,
      but several descendants (.artist, .eyebrow-standalone, .stat-value,
@@ -724,7 +744,18 @@
 
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
   body { display: block; background: transparent; }
-  .stage { width: 100vw; height: 100vh; }
+  /* Only a REAL OBS Browser Source gets the exact-fill treatment (see
+     body.obs-host detection in the boot script below, keyed off
+     window.obsstudio — a global OBS itself injects, that a plain Chrome
+     tab never has). OBS always sizes its Browser Source's page viewport
+     to exactly the width/height set in its properties dialog, so
+     100vw/100vh there IS the streamer's configured size, pixel for
+     pixel — no aspect-ratio math needed. A plain browser tab has no such
+     guarantee (the window can be any size), so it falls back to the
+     earlier `.stage` rule above: capped at 94vw, height derived from
+     --stage-ratio, so it renders at (close to) its real configured size
+     instead of stretching to fill whatever the window happens to be. */
+  body.obs-host .stage { width: 100vw; height: 100vh; }
 
   /* Connection-lost indicator — invisible in normal operation; a small dot
      so a streamer glancing at their preview can tell live data stalled
@@ -807,6 +838,15 @@
   if (window.self !== window.top) {
     document.documentElement.classList.add('embedded');
     document.body.classList.add('embedded');
+  }
+  // See body.obs-host's own CSS comment — window.obsstudio only exists
+  // when this page is actually loaded inside OBS's Browser Source (OBS
+  // injects it there since v25); a plain Chrome tab never has it, so this
+  // safely stays false-negative-free without needing any user-agent
+  // sniffing (which OBS's Browser Source doesn't reliably distinguish
+  // itself with anyway).
+  if (window.obsstudio) {
+    document.body.classList.add('obs-host');
   }
   // Step 3 of the editor/render consolidation: instant preview. Normally
   // this page only learns about a layout/visuals change once the editor
@@ -1098,6 +1138,35 @@
     if (typeof visuals.edgeRounding === 'number') root.style.setProperty('--edge-rounding', visuals.edgeRounding + 'px');
     if (visuals.canvasBgRgb) root.style.setProperty('--canvas-bg-rgb', visuals.canvasBgRgb);
     if (typeof visuals.canvasBgAlpha === 'number') root.style.setProperty('--canvas-bg-alpha', String(visuals.canvasBgAlpha));
+    // Stage's own Customize override (editor.html's "Stage" entry — see
+    // its applyStageOverride comment) — --stage-*-override wins over the
+    // plain Global vars just set above whenever it's on, same var()-
+    // fallback-chain pattern as everywhere else this file mirrors from
+    // editor.html.
+    if (data.stageOverride && data.stageOverride.useCustomStyles) {
+      // Type-checked the same way every plain visuals.* property above is
+      // (typeof/truthy guards before setProperty) — an older or hand-
+      // edited saved layout could have useCustomStyles:true with an
+      // incomplete stageOverride object. Without these guards, a missing
+      // field wrote the literal string "undefinedpx"/"undefined" into a
+      // custom property, which — since --stage-border-width-override and
+      // --stage-accent-override both feed .stage::after's single `border`
+      // shorthand — invalidates that WHOLE declaration on an invalid
+      // value, silently dropping the entire stage border ring instead of
+      // falling back to the plain Global border/accent it's meant to.
+      const so = data.stageOverride;
+      if (typeof so.borderWidth === 'number') root.style.setProperty('--stage-border-width-override', so.borderWidth + 'px');
+      if (typeof so.edgeRounding === 'number') root.style.setProperty('--stage-edge-rounding-override', so.edgeRounding + 'px');
+      if (typeof so.canvasBgColor === 'string') root.style.setProperty('--stage-canvas-bg-rgb-override', MarqueeCore.hexToRgbChannels(so.canvasBgColor));
+      if (typeof so.canvasBgAlpha === 'number') root.style.setProperty('--stage-canvas-bg-alpha-override', String(so.canvasBgAlpha));
+      if (typeof so.accent === 'string') root.style.setProperty('--stage-accent-override', so.accent);
+    } else {
+      root.style.removeProperty('--stage-border-width-override');
+      root.style.removeProperty('--stage-edge-rounding-override');
+      root.style.removeProperty('--stage-canvas-bg-rgb-override');
+      root.style.removeProperty('--stage-canvas-bg-alpha-override');
+      root.style.removeProperty('--stage-accent-override');
+    }
     if (visuals.font) root.style.setProperty('--font-display', '"' + visuals.font + '", "Segoe UI", Arial, sans-serif');
     if (typeof visuals.fadeSeconds === 'number') root.style.setProperty('--fade-seconds', visuals.fadeSeconds + 's');
     // marqueeBulbSize/marqueeBulbGap drive setBulbLoop() directly (see its
@@ -1554,12 +1623,25 @@
     if (dot) dot.classList.toggle('stale', !!stale);
   }
 
+  // Bounded exponential backoff (1s → 2s → 4s → 8s cap) instead of a flat
+  // 1s retry forever — fine for the common case (a quick FeedBack
+  // restart, a momentary network blip on the same LAN), but a flat 1s
+  // retry against a server that's genuinely down for a while (FeedBack
+  // fully closed, not just restarting) just spins pointlessly fast with
+  // no benefit. Reset back to 1s on every successful connect, so a
+  // single blip never leaves a LATER, unrelated disconnect starting from
+  // a stale slow delay.
+  const RECONNECT_BASE_MS = 1000;
+  const RECONNECT_MAX_MS = 8000;
+  let reconnectDelayMs = RECONNECT_BASE_MS;
+
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(proto + '://' + location.host + `/ws/plugins/${PLUGIN_ID}/live`);
     ws.onopen = () => {
       markStale(false);
       connectionStale = false;
+      reconnectDelayMs = RECONNECT_BASE_MS;
       // A reconnect can follow FeedBack restarting, not just a network
       // blip — re-fetching real state now (same call the page makes on
       // first load) picks up whatever's actually current immediately,
@@ -1584,7 +1666,8 @@
       // "Always Show."
       connectionStale = true;
       updateVisibility({ song: null, preview: null });
-      setTimeout(connect, 1000);
+      setTimeout(connect, reconnectDelayMs);
+      reconnectDelayMs = Math.min(RECONNECT_MAX_MS, reconnectDelayMs * 2);
     };
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
   }

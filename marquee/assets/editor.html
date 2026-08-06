@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<title>Marquee — Layout Editor</title><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Marquee — Stage Editor</title><meta name="viewport" content="width=device-width, initial-scale=1" />
 <!-- Bridges the Visual Settings panel's --vs-* tokens to FeedBack's live
      theme (see the :root block below). Same-origin when served for real via
      GET /api/plugins/marquee/editor (routes.py registers on the host's own
@@ -195,6 +195,17 @@
     padding: 40px;
     display: flex;
     flex-direction: column;
+    /* Nothing in this editor's own UI needs to be text-selectable — a
+       stray click near a slider/toggle/button shouldn't highlight text
+       instead of doing nothing (see .panel/.edit-toggle/.reset-btn's own
+       earlier per-element versions of this, now consolidated here since
+       the whole page needs it, not just those). Real text-entry fields
+       (font search, import/export textareas) keep their own native
+       selection regardless of an ancestor's user-select. The one genuine
+       exception is #marquee-editor-obs-url below — the URL a user needs
+       to copy into OBS — explicitly re-enabled there. */
+    user-select: none;
+    -webkit-user-select: none;
     /* Plain `center` first as a fallback: browsers that don't understand
        `safe center` (pre-2024 Chromium, older WebViews/OBS Browser
        Sources) drop that whole declaration and would otherwise fall back
@@ -301,7 +312,7 @@
        from the left column's natural stretch-to-widest content, then
        applied as an explicit width everywhere so the right column
        matches instead of sizing to its own content. Currently driven by
-       "Unlock Layout:" plus its fixed-position icon+checkbox group (see
+       "Unlock Stage:" plus its fixed-position icon+checkbox group (see
        .toggle-icon-group) — the longest label paired with the widest
        control, not "Outlines: On/Off" which is shorter. Same idea for
        height — .edit-toggle's checkbox+label content and
@@ -316,11 +327,13 @@
      canvas — synced to the same .edit-toggle/.switch look Lock Layout
      already used, rather than each having its own style). */
   .toolbar-toggles { display: flex; flex-direction: column; gap: 8px; }
-  /* Reset to Defaults + Test Confetti stacked on the toolbar's right edge
-     (.toolbar's space-between pushes this column away from
+  /* Reset to Defaults + the preset dropdown stacked on the toolbar's
+     right edge (.toolbar's space-between pushes this column away from
      .toolbar-toggles on the left) — align-items:flex-end so the shorter
-     button sits flush against the right edge of the taller one above it,
-     not left-aligned under it. */
+     control sits flush against the right edge of the taller one above it,
+     not left-aligned under it. Test Confetti used to live here too but
+     has since moved into the Confetti settings row itself (#testConfettiBtn,
+     sharing the Confetti Amount slider's header line). */
   .toolbar-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
   /* Toolbar chrome (this select, .edit-toggle, .reset-btn) now reads the
      --vs-* tokens like the Visual Settings panel does, rather than the
@@ -644,6 +657,13 @@
     cursor: pointer;
   }
   .reset-btn:hover { border-color: var(--vs-text-dim); }
+  /* Delete Preset reuses .reset-btn's exact pill, just with a red hover to
+     signal it's destructive — same --vs-accent red already used for the
+     Customize-tab override reminder and the Advanced tab's "Disable"
+     state, not a new color introduced just for this. */
+  .delete-preset-btn:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
+  .delete-preset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .delete-preset-btn:disabled:hover { border-color: var(--vs-border); color: #f2f2f2; }
   /* Reset to Defaults' icon — a plain unicode glyph rather than a
      hand-drawn CSS shape, same precedent as .preset-static-label's ▾
      arrows (a hand-drawn CSS arc+arrowhead was tried first but replaced
@@ -687,7 +707,15 @@
        positions/sizes always preview true-to-output. */
     width: var(--stage-w-px);
     aspect-ratio: var(--stage-ratio);
-    border-radius: var(--edge-rounding);
+    /* Same override-first fallback chain as .stage::after's own border-
+       radius below (--stage-edge-rounding-override) — this is the box
+       whose overflow:hidden actually clips the stage's content, so
+       leaving it on the plain global --edge-rounding meant the Stage
+       Customize override could zero out the visible border ring's
+       rounding but the underlying clip stayed rounded by the GLOBAL
+       value regardless — reported live as "edges still appear cut off"
+       even with the override's Edge Rounding set to 0. */
+    border-radius: var(--stage-edge-rounding-override, var(--edge-rounding));
     /* Strict — real clipping at the stage's TRUE edge, no grace margin.
        An earlier version used overflow-clip-margin to keep
        .resize-handle/.obj-toggle-off visible past the edge, but that
@@ -735,7 +763,7 @@
     gap: 6px;
     /* The iframe below is exactly --stage-w-px wide (see its own
        comment) — for a preset far wider than this panel (1920px
-       TheMarquee/Rocksniffer, say), that's wider than the available
+       TheMarquee, say), that's wider than the available
        column, so this wrapper scrolls rather than clipping/squeezing
        it: render.html's own body.embedded rule assumes the iframe IS
        its exact design size, with zero slack, so shrinking the outer
@@ -782,8 +810,12 @@
     inset: 0;
     z-index: 10001;
     pointer-events: none;
-    border: var(--border-width) solid var(--accent);
-    border-radius: var(--edge-rounding);
+    /* --stage-*-override (Customize tab's "Stage" entry — see
+       applyStageOverride's own comment) wins when set; falls back to the
+       plain Global value otherwise, same var()-fallback-chain pattern as
+       Score's --text-color-override. */
+    border: var(--stage-border-width-override, var(--border-width)) solid var(--stage-accent-override, var(--accent));
+    border-radius: var(--stage-edge-rounding-override, var(--edge-rounding));
   }
   /* Above the ordering z-index range AND above .obj.dragging/.obj.resizing's
      9999 (see applyOrder in JS) — a confetti burst should never end up
@@ -825,7 +857,7 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-color: rgb(var(--canvas-bg-rgb) / var(--canvas-bg-alpha));
+    background-color: rgb(var(--stage-canvas-bg-rgb-override, var(--canvas-bg-rgb)) / var(--stage-canvas-bg-alpha-override, var(--canvas-bg-alpha)));
   }
   /* Alignment grid — editing aid only (edit-mode-gated below), not part of
      the real output. Fixed 20x20 division count (5% steps) rather than a
@@ -902,7 +934,10 @@
   .obs-note code {
     font-family: var(--font-mono);
     background: var(--void);
-    padding: 1px 5px;
+    /* Extra horizontal padding (was 5px) — gives a click-drag selection
+       real room to start/end without needing to land pixel-perfectly on
+       the text's own edge, reported live as too tight to select easily. */
+    padding: 1px 16px;
     border-radius: 3px;
     color: var(--paper);
     font-size: 0.92em;
@@ -910,6 +945,34 @@
        enough to fit it — was previously wrapping to 2 lines, reported as
        looking worse than just sizing the box to fit. */
     white-space: nowrap;
+    /* The one exception to body's page-wide user-select:none — this is
+       the URL a user actually needs to select/copy into OBS. */
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  /* Advanced tab: address shown inline right next to its own step label
+     (unlike the toolbar's OBS URL, which gets its own dedicated box) —
+     same mono/select-to-copy treatment as .obs-note code above, just not
+     nested inside that class since there's no surrounding note box here. */
+  #advancedPanel code {
+    font-family: var(--font-mono);
+    background: var(--void);
+    padding: 1px 16px;
+    border-radius: 3px;
+    color: var(--paper);
+    font-size: 0.92em;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  /* Caution text — deliberately NOT .obs-note (that class's flex-basis/
+     max-width was sized for the toolbar's narrower two-item row); this
+     just needs to read as one full-width paragraph under the numbered
+     steps above, spanning the same width the steps/rows already do. */
+  #advancedPanel .network-caution {
+    color: var(--paper-dim);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    margin: 6px 0 0;
   }
   /* ---- draggable objects ---- */
   .obj {
@@ -955,7 +1018,6 @@
        the border and the text. */
     padding: 1px;
     touch-action: none;
-    user-select: none;
     /* Top-left anchored: scaling grows toward bottom-right only, so resize
        never moves the object off its set (x, y) position. */
     transform-origin: top left;
@@ -1081,7 +1143,11 @@
     z-index: 2;
   }
   .stage.editing .obj .resize-handle { opacity: 1; }
-  .obj-art { width: 84px; height: 84px; padding: 1px; }
+  /* overflow:hidden so Edge Rounding actually crops the <img> itself —
+     .obj's own border-radius (inherited via var(--edge-rounding)) rounds
+     the box's background/border fine on its own, but a child <img> isn't
+     clipped by an ancestor's border-radius unless overflow is set. */
+  .obj-art { width: 84px; height: 84px; padding: 1px; overflow: hidden; }
   .obj-art .art-img {
     width: 100%; height: 100%; object-fit: cover; display: block;
     /* img is natively draggable, which hijacks the pointer gesture into a
@@ -1100,7 +1166,16 @@
   .obj-info { width: max-content; }
   .title {
     /* font-family inherited from .obj — do not set it here */
-    margin: 0 0 3px; font-weight: 900;
+    /* Was hardcoded to 900 (the CSS max) — meant Bold could never have
+       any visible effect on the Title specifically, since it was already
+       pinned at the heaviest possible weight regardless of the toggle
+       (reported live: "bold doesn't seem to work"). 700 keeps Title
+       reading as a strong heading by default, same weight
+       .eyebrow-standalone/.stat-label already use for their own header
+       text, while leaving real room for Bold (which pushes everything to
+       900 via .bold-active's own !important rule) to actually do
+       something visible here like it does everywhere else. */
+    margin: 0 0 3px; font-weight: 700;
     font-size: 1.2em; line-height: 1.15; color: var(--text-color); letter-spacing: -0.01em;
     /* Used to have transform: scaleX(0.93) (a condensed-text look) — removed
        because a transform doesn't change the box's own width, only how the
@@ -1561,7 +1636,12 @@
   /* Horizontal padding keeps the elapsed/duration values from sitting
      flush against .obj-progress's own edge — see render.html's own .time
      rule for the full reasoning (mirrored here). */
-  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--paper-dim); font-weight: 600; flex: 0 1 auto; min-width: 0; padding: 0 6px; }
+  /* Was hardcoded to var(--paper-dim) — a fixed editor-chrome color never
+     touched by the Text Color control (global OR per-element override),
+     so Song Time's digits silently ignored it entirely while every other
+     text element's color worked fine. Reads --text-color now, same as
+     .title/.artist/.stat-value/.custom-text. */
+  .time { font-variant-numeric: tabular-nums; font-size: 0.7em; color: var(--text-color); font-weight: 600; flex: 0 1 auto; min-width: 0; padding: 0 6px; }
   .progress-track { flex: 1; height: 3px; background: rgba(243, 233, 216, 0.14); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 35%; background: linear-gradient(90deg, var(--accent), var(--bulb-hot)); }
   /* Custom user-added text objects — same ticker/no-truncation behavior as
@@ -1569,21 +1649,16 @@
      hidden via the Elements list; custom ones can be removed outright). */
   .obj-custom { width: max-content; }
   .custom-text { display: block; font-size: 0.9em; font-weight: 600; color: var(--text-color); }
-  /* No synthetic bold/italic, anywhere — if the chosen font (see the font
-     picker; can be any font installed on the user's system) has no real
-     bold or italic face, Bold/Italic simply do nothing visually instead
-     of the browser faking one. Was previously two separate half-measures:
-     a manual -webkit-text-stroke thickening trick for Bold (worked
-     regardless of the font's real weights, so it faked a change even
-     where none should show), and font-synthesis left at its default
-     "auto" for Italic (let the browser fake an oblique slant for fonts
-     with no real italic face). Both removed per direct request
-     (2026-08-05) — "I don't need a fake bold/italic if it doesn't have it
-     as part of that font family, I'm ok with it doing nothing." One
-     unconditional rule blocks all synthesis regardless of which toggle
-     combination is active, rather than needing it repeated in every
-     on/off rule below. */
-  .obj, .obj * { font-synthesis: none !important; }
+  /* Synthetic bold/italic ALLOWED again (reversed 2026-08-06 — many of
+     the fonts actually in use turned out not to have a real bold/italic
+     face at all, so "do nothing" meant Bold/Italic silently failed far
+     more often than expected). Browser default (font-synthesis: auto,
+     the plain absence of this property) lets it fake a heavier weight/
+     oblique slant for a font with no real bold/italic face, same as
+     virtually every other app does. Previously forced to `none` per an
+     earlier request (2026-08-05) that traded this off deliberately; see
+     git history if that reasoning is ever needed again — no rule left
+     here now, this is just the browser's own default behavior. */
   /* Scoped to .obj AND every descendant (the trailing `*`), not a list of
      specific text-class names. font-weight/font-style are inherited
      properties, but several descendants (.artist, .eyebrow-standalone,
@@ -1764,6 +1839,29 @@
      Customize tab-click handler, removed by Global's. */
   .settings-tabs-note.is-inert { cursor: default; pointer-events: none; }
   .settings-tabs-note.is-inert:hover { color: var(--vs-text-dim); }
+  /* Gentle pulse when at least one element has Customize overrides on —
+     gold/amber (--gold), not --vs-accent's red: this is a heads-up, not
+     an error/warning, and an earlier red-bordered version of this exact
+     note was already reported as reading "too loud" for something that
+     sits on screen permanently. A slow color breathe (no scale/motion)
+     stays noticeable without being distracting while you're reading
+     something else nearby. */
+  @keyframes settings-note-pulse {
+    0%, 100% { color: var(--vs-text-dim); }
+    50% { color: var(--gold); }
+  }
+  .settings-tabs-note.has-overrides { animation: settings-note-pulse 2.4s ease-in-out infinite; }
+  .settings-tabs-note.has-overrides:hover { animation-play-state: paused; color: #fff; }
+  /* The "N Elements" count gets its OWN pulse — same base resting color
+     as the rest of the sentence (--vs-text-dim) to red (--vs-accent) —
+     separate from the parent's text-dim/gold cycle above, so it needs
+     its own animation rather than just inheriting the parent's color. */
+  @keyframes settings-note-count-pulse {
+    0%, 100% { color: var(--vs-text-dim); }
+    50% { color: var(--vs-accent); }
+  }
+  .settings-tabs-note.has-overrides .note-count { animation: settings-note-count-pulse 2.4s ease-in-out infinite; }
+  .settings-tabs-note.has-overrides:hover .note-count { animation-play-state: paused; color: #fff; }
   /* One row per OVERRIDABLE_SETTINGS entry, built in
      renderCustomizeSettingRows() — label, then the control itself.
      Whether the control is live or just mirroring Global (disabled) is
@@ -1847,21 +1945,11 @@
   .panel .control-row:hover {
     background: rgba(255, 255, 255, 0.04);
   }
-  /* Marquee Text Scroll + Marquee Stars read as one grouped pair (see
-     .marquee-scroll-row's own comment) — so hovering EITHER row should
-     highlight both, not just the one under the cursor. .group-hover is
-     toggled on both rows together by JS (wireMarqueeGroupHover) on
-     mouseenter/mouseleave of either. Same visual as the real :hover rule
-     above, just driven by a class instead of the pseudo-class so it can
-     apply to a row the cursor isn't actually over. */
-  .panel .control-row.group-hover {
-    background: rgba(255, 255, 255, 0.04);
-  }
   /* Section grouping for the Global tab reorg. .settings-section-rows is
      a direct-children-only wrapper (holds just that section's own rows/
      pairs, not its title) so :last-child below resolves per-section
      instead of across the whole flat tab like the old .control-row:last-
-     child (line ~1252) did. */
+     child (line ~2586) did. */
   .panel .settings-section {
     background: var(--vs-card-bg);
     border-radius: 8px;
@@ -1882,18 +1970,19 @@
     padding-bottom: 6px;
     border-bottom: 1px solid var(--vs-border);
   }
-  /* Collapsible settings-group cards — Global and Customize tabs only
-     (scoped to their own tab ids, not the Elements/Import-Export panels'
-     own unrelated .settings-section-title cards, which stay plain).
-     Delegated click handler (see wireCollapsibleSettingsSections) toggles
+  /* Collapsible settings-group cards — Global, Customize, Advanced, and
+     Elements tabs (each scoped to its own tab/panel id below; Import/
+     Export shares Advanced's id since it was later merged into that
+     panel). Delegated click handler (see wireCollapsibleSettingsSections) toggles
      .collapsed on the ancestor .settings-section; collapse state itself
      lives in the collapsedSectionTitles Set, not just this class, since
      Customize's cards are fully rebuilt on nearly every interaction (see
      that Set's own comment). */
   #globalSettingsTab .settings-section-title,
-  #customizeSettingsTab .settings-section-title {
+  #customizeSettingsTab .settings-section-title,
+  #advancedPanel .settings-section-title,
+  #elementsPanel .settings-section-title {
     cursor: pointer;
-    user-select: none;
     /* Absolutely-positioned arrows (below) instead of flex — decouples
        their position from the title text entirely, so the text stays
        genuinely centered (its own text-align:center, untouched) instead
@@ -1922,7 +2011,11 @@
   #globalSettingsTab .settings-section-title::before,
   #globalSettingsTab .settings-section-title::after,
   #customizeSettingsTab .settings-section-title::before,
-  #customizeSettingsTab .settings-section-title::after {
+  #customizeSettingsTab .settings-section-title::after,
+  #advancedPanel .settings-section-title::before,
+  #advancedPanel .settings-section-title::after,
+  #elementsPanel .settings-section-title::before,
+  #elementsPanel .settings-section-title::after {
     content: '';
     width: 26px;
     height: 26px;
@@ -1940,7 +2033,9 @@
      orientation, unrotated). rotate(135deg) turns that to South — both
      arrows point straight down while open, per request. */
   #globalSettingsTab .settings-section-title::before,
-  #customizeSettingsTab .settings-section-title::before {
+  #customizeSettingsTab .settings-section-title::before,
+  #advancedPanel .settings-section-title::before,
+  #elementsPanel .settings-section-title::before {
     left: 4px;
     transform: translateY(-50%) rotate(135deg);
   }
@@ -1951,7 +2046,9 @@
      rule below for why both arrows end up needing the exact same
      rotate() degree despite pointing opposite ways once mirrored). */
   #globalSettingsTab .settings-section-title::after,
-  #customizeSettingsTab .settings-section-title::after {
+  #customizeSettingsTab .settings-section-title::after,
+  #advancedPanel .settings-section-title::after,
+  #elementsPanel .settings-section-title::after {
     right: 4px;
     transform: translateY(-50%) scaleX(-1) rotate(135deg);
   }
@@ -1966,14 +2063,40 @@
      left arrow directly; the right arrow's mirror (see above) reflects
      that same East angle to West for free, no separate value needed. */
   #globalSettingsTab .settings-section.collapsed .settings-section-title::before,
-  #customizeSettingsTab .settings-section.collapsed .settings-section-title::before {
+  #customizeSettingsTab .settings-section.collapsed .settings-section-title::before,
+  #advancedPanel .settings-section.collapsed .settings-section-title::before,
+  #elementsPanel .settings-section.collapsed .settings-section-title::before {
     transform: translateY(-50%) rotate(45deg);
     color: var(--vs-accent);
   }
   #globalSettingsTab .settings-section.collapsed .settings-section-title::after,
-  #customizeSettingsTab .settings-section.collapsed .settings-section-title::after {
+  #customizeSettingsTab .settings-section.collapsed .settings-section-title::after,
+  #advancedPanel .settings-section.collapsed .settings-section-title::after,
+  #elementsPanel .settings-section.collapsed .settings-section-title::after {
     transform: translateY(-50%) scaleX(-1) rotate(45deg);
     color: var(--vs-accent);
+  }
+  /* A small "there's more here" hint on the collapsed bar itself — NOT on
+     the title (that already has its own centered text + arrows either
+     side; cramming a third thing into that same line would fight for the
+     same space). This is a plain ::after on .settings-section itself, so
+     it paints after the title AND the (collapsed-to-0-height,
+     overflow:hidden) rows — landing in the section's own bottom padding,
+     the small leftover strip of the card that's still visible once
+     collapsed. Renders as nothing while expanded — that's the whole
+     `.collapsed` scope. */
+  #globalSettingsTab .settings-section.collapsed::after,
+  #customizeSettingsTab .settings-section.collapsed::after,
+  #advancedPanel .settings-section.collapsed::after,
+  #elementsPanel .settings-section.collapsed::after {
+    content: '•••';
+    display: block;
+    text-align: center;
+    color: var(--paper-dim);
+    font-size: 0.7rem;
+    letter-spacing: 4px;
+    line-height: 1;
+    padding-top: 4px;
   }
   /* Animated collapse (max-height, not display:none) — per request, an
      instant display:none snap made the rest of the page jump immediately
@@ -1994,11 +2117,31 @@
      'none' at all) the instant the class changed, snapping the page
      closed before the JS-driven animation ever got a chance to start. */
   #globalSettingsTab .settings-section-rows,
-  #customizeSettingsTab .settings-section-rows {
+  #customizeSettingsTab .settings-section-rows,
+  #advancedPanel .settings-section-rows,
+  #elementsPanel .settings-section-rows {
     overflow: hidden;
     transition: max-height 0.25s ease;
   }
   .panel .settings-section-rows { display: flex; flex-direction: column; }
+  /* The collapse animation is supposed to work purely by clipping (see
+     the max-height/overflow:hidden rule's own comment) — content should
+     never actually change size, just get visually cut off as max-height
+     shrinks. But a flex column's children default to flex-shrink:1, and
+     per spec, any child whose own `overflow` isn't `visible` in an axis
+     ALSO gets its automatic minimum size in that axis reduced to 0 — so
+     a child like #elementToggles (sets overflow-x:auto for its own
+     horizontal scroll, which per the CSS Overflow spec also computes its
+     overflow-y to auto) could genuinely flex-shrink to a real 0px height
+     instead of just being clipped. Confirmed live: that's exactly what
+     got the Elements tab's list stuck permanently collapsed — even after
+     max-height was correctly restored, the child itself had actually
+     been resized to 0 and flex layout didn't reliably re-grow it back.
+     flex-shrink:0 removes the possibility entirely: every direct child
+     keeps its natural size always, so overflow:hidden is the only thing
+     ever doing the hiding, regardless of what any particular section's
+     content sets its own `overflow` to. */
+  .panel .settings-section-rows > * { flex-shrink: 0; }
   /* No padding-bottom reduction on the last pair in a section — full,
      consistent padding everywhere is what makes every row/pair's height
      actually match, and the section card's own bottom padding already
@@ -2091,7 +2234,9 @@
   /* Dims a dependent slider's own label to match its input's :disabled
      dimming (see .panel input[type=range]:disabled) — set on
      .feature-row-slider whenever its feature's own checkbox is off (see
-     renderCustomizeFeatureRow/wireFeatureRowSliderFlash's disabling). */
+     renderCustomizeFeatureRow's own disabling, and any of the script's
+     wire*Lock functions near their gating controls for the Global-tab
+     equivalent). */
   .panel .feature-row-slider.feature-slider-locked label { opacity: 0.45; }
   /* Same idea, for Confetti's own row — see wireConfettiLock's own
      comment (Element Header Text Size's row shape, not a feature-row). */
@@ -2099,8 +2244,8 @@
   /* Confetti Duration/Trigger — greyed out together with the rest of
      Confetti's own controls when its checkbox is off, even though they
      live in the OTHER half-column (see wireConfettiTimingLock's own
-     comment in the script for why this needs separate wiring from
-     wireFeatureRowSliderFlash). */
+     comment in the script for why this needs separate wiring from the
+     other feature-row locks). */
   .panel .control-row--confetti-timing-group.feature-slider-locked label { opacity: 0.45; }
   .panel .feature-row-sliders {
     flex: 0 0 260px;
@@ -2196,8 +2341,17 @@
     border-width: 0 2px 2px 0;
     transform: rotate(40deg);
   }
+  /* pointer-events:none on top of :disabled — a disabled form control
+     doesn't dispatch a 'click' event at all in Chromium (confirmed live:
+     clicking directly on a disabled slider/checkbox never reached the
+     containing row's own click-to-flash listener, only clicking the
+     row's label text did — reported as "flash only works on the text").
+     This makes the disabled control transparent to hit-testing, so the
+     click lands on/bubbles from the ROW underneath instead, same as
+     clicking anywhere else in it. The control was already fully
+     non-interactive via :disabled, so this changes nothing functional. */
   .panel .vs-checkbox:disabled,
-  .toolbar-toggles .vs-checkbox:disabled { opacity: 0.45; cursor: default; }
+  .toolbar-toggles .vs-checkbox:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   /* Slider fill + min/max/value labels — the file has no prior art for
      either (see the plain accent-color-tinted native rule this overrides
      below); --fill is written per-input by syncSliderFill() in the
@@ -2234,7 +2388,10 @@
     box-shadow: 0 0 0 2px var(--vs-card-bg);
     cursor: grab;
   }
-  .panel input[type="range"]:disabled { opacity: 0.45; cursor: default; }
+  /* pointer-events:none — same reasoning as .vs-checkbox:disabled's own
+     comment right above (disabled form controls swallow clicks entirely,
+     never bubbling to the row's own click-to-flash listener). */
+  .panel input[type="range"]:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   /* Same dimming for a disabled fontsize-field number box — nothing in
      the UA stylesheet makes :disabled visibly different against this
      custom dark styling otherwise. */
@@ -2291,6 +2448,24 @@
   }
   .panel .load-fonts-btn:hover { color: #f2f2f2; border-color: var(--vs-text-dim); }
   .panel .load-fonts-btn.danger:hover { color: #f2f2f2; background: var(--vs-accent); border-color: var(--vs-accent); }
+  /* FeedBack Network Sharing toggle button (Advanced tab, step 1) — green
+     "Enable" when off (click turns it on), red "Disable" once confirmed
+     on (click turns it back off). Solid fill rather than the plain
+     .load-fonts-btn/.danger hover-only treatment above, since this one
+     needs to communicate its CURRENT state at a glance, not just what a
+     hover would do. */
+  .panel .load-fonts-btn.btn-state-enable {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: #0a0a0a;
+  }
+  .panel .load-fonts-btn.btn-state-enable:hover { background: #16a34a; border-color: #16a34a; color: #0a0a0a; }
+  .panel .load-fonts-btn.btn-state-disable {
+    background: var(--vs-accent);
+    border-color: var(--vs-accent);
+    color: #f2f2f2;
+  }
+  .panel .load-fonts-btn.btn-state-disable:hover { background: #dc2626; border-color: #dc2626; color: #f2f2f2; }
   .panel .text-input,
   .panel .io-textarea {
     background: var(--vs-page-bg);
@@ -2329,7 +2504,7 @@
     border-color: var(--vs-border);
   }
   .panel .empty-note { color: var(--vs-text-dim); }
-  /* Customize tab alignment — .control-cell's base rule (line ~1214) is
+  /* Customize tab alignment — .control-cell's base rule (line ~1837) is
      flex:none, i.e. sized to each row's own content, so a plain slider
      row's control area and a coloralpha row's (color swatch + slider,
      wider) start at different x-positions and every track ends up a
@@ -2394,6 +2569,35 @@
     50% { box-shadow: 0 0 0 3px #ff0000; border-color: #ff0000; }
   }
   #visualSettingsPanel .customize-enable-band.enable-flash { animation: customize-enable-flash 0.6s ease-in-out; }
+  /* Enable Bulbs'/Text Scroll's own attention flash — explicitly red (not
+     the themed var(--vs-accent) .lock-flash uses), per request, same red
+     as customize-enable-flash above. A DIFFERENT (not shared) keyframe,
+     using an INSET shadow instead of customize-enable-flash's outward
+     one — these rows live inside .settings-section-rows, which needs
+     overflow:hidden for the collapse-card height animation and was
+     clipping the outward ring right at the row's edge (reported live:
+     cut off on the left side). inset can never be clipped by anything,
+     since it never extends past the row's own border box. Triggered by
+     flashEnableBulbsToggle (Bulb Size/Gap/Flicker/Stage Scroll/Element
+     Scroll clicked while Enable Bulbs is Off) and flashMarqueeScrollToggle
+     (Stars clicked while Text Scroll is off). */
+  @keyframes row-off-flash {
+    0%, 100% { box-shadow: none; border-color: var(--vs-border); }
+    25%, 75% { box-shadow: inset 0 0 0 2px #ff0000; border-color: #ff0000; }
+    50% { box-shadow: inset 0 0 0 3px #ff0000; border-color: #ff0000; }
+  }
+  .control-row.bulbs-off-flash,
+  .feature-row.bulbs-off-flash { animation: row-off-flash 0.6s ease-in-out; }
+  /* Reuses the same red inset-flash keyframe above for a plain element
+     that isn't a .control-row/.feature-row — the Add Custom Text input,
+     flashed on clicking Add while it's empty (see addCustomTextFromInput)
+     instead of silently no-oping. Inset, not outline, so it can never get
+     clipped by an ancestor's overflow:hidden the way the input's default
+     :focus-visible outline could (reported live, cropped top/bottom by
+     .settings-section-rows' collapse-animation clipping) — this replaces
+     that outline for this one input entirely, not just adds to it. */
+  #customTextInput.input-flash-red { animation: row-off-flash 0.6s ease-in-out; }
+  #customTextInput:focus-visible { outline: none; }
   /* Used to carry a dashed border-bottom "leader line" connecting a
      row's label to its control (justify-content:space-between spreads
      them across the full panel width, so it was hard to tell at a
@@ -2658,7 +2862,6 @@
     line-height: 1;
     letter-spacing: -1px;
     cursor: grab;
-    user-select: none;
   }
   .drag-handle:active { cursor: grabbing; }
   .rank-badge {
@@ -2932,7 +3135,7 @@
   </div></div><div class="toolbar">
   <div class="toolbar-toggles">
     <label class="edit-toggle">
-      <span class="label" id="lockLayoutLabel">Unlock Layout:</span>
+      <span class="label" id="lockLayoutLabel">Unlock Stage:</span>
       <span class="toggle-icon-group">
         <span class="lock-icon" id="lockIcon" aria-hidden="true"></span>
         <input type="checkbox" id="editMode" class="vs-checkbox" checked />
@@ -2984,16 +3187,27 @@
         <option value="Tall">Tall</option>
         <option value="TheMarquee">The Marquee</option>
         <option value="UserOff">USER</option>
-        <option value="Test">TEST</option>
-        <!-- Rocksniffer/v1-3 temporarily hidden from the list (not deleted —
-             PRESETS.Rocksniffer/RocksnifferV1-3 below are untouched, just
-             unreachable from this dropdown until they're revisited). -->
       </select>
       <span class="preset-static-label" aria-hidden="true">PRESETS</span>
     </div>
+    <!-- Save the live stage as a brand new preset (prompts for a name,
+         slugifies it, appends it to #presetSelect) — see the plugin
+         integration script near the bottom of this file for the actual
+         save/delete logic and PRESET_PREFS_URL persistence. Delete removes
+         WHICHEVER preset is currently selected, built-in or custom alike —
+         built-ins are just hidden from this dropdown from then on (their
+         defaults still ship in assets/presets/, nothing is destroyed),
+         custom ones are actually erased. Both survive a plugin update: see
+         routes.py's preset_prefs_file comment. -->
+    <button class="reset-btn save-preset-btn" id="savePresetBtn" type="button">
+      <span>Save As</span>
+    </button>
+    <button class="reset-btn delete-preset-btn" id="deletePresetBtn" type="button">
+      <span>Delete Preset</span>
+    </button>
   </div></div><div class="drag-hint" id="dragHint">
-  <p>This is your layout as it will be sent out. Change layout size and other visuals below:</p>
-  <p>Click to move/resize any element in the layout panel below:</p></div><div class="stage" id="stage">
+  <p>This is your stage as it will be sent out. Change stage size and other visuals below:</p>
+  <p>Click to move/resize any element in the stage panel below:</p></div><div class="stage" id="stage">
   <div class="stage-bg" aria-hidden="true"></div>
   <div class="stage-canvas-bg" aria-hidden="true"></div>
   <div class="stage-grid" aria-hidden="true"></div>
@@ -3075,7 +3289,7 @@
 </div><div class="panel-tabs" role="tablist">
   <button type="button" class="panel-tab active" id="panelTabVisualBtn" role="tab" aria-selected="true" aria-controls="visualSettingsPanel">Visual Settings</button>
   <button type="button" class="panel-tab" id="panelTabElementsBtn" role="tab" aria-selected="false" aria-controls="elementsPanel">Elements</button>
-  <button type="button" class="panel-tab" id="panelTabImportExportBtn" role="tab" aria-selected="false" aria-controls="importExportPanel">Import/Export</button>
+  <button type="button" class="panel-tab" id="panelTabAdvancedBtn" role="tab" aria-selected="false" aria-controls="advancedPanel">Advanced</button>
 </div><div class="panel" id="visualSettingsPanel" data-tab="visual" role="tabpanel">
   <!-- Global applies to every element identically, exactly like this
        whole panel always has. Customize is per-element: pick one element
@@ -3098,21 +3312,21 @@
        visible). Real <button> so it stays clickable — while on Global,
        jumps straight to Customize. See refreshCustomizeOverrideBadge for
        what keeps its text in sync. -->
-  <button type="button" class="settings-tabs-note" id="settingsTabsNote">Global settings do not overwrite customize settings. Presets have some enabled customizations.</button>
+  <button type="button" class="settings-tabs-note" id="settingsTabsNote">There are <strong><u class="note-count">0 Elements</u></strong> with custom settings that do not respond to global settings. See Customize tab to edit.</button>
   <div id="globalSettingsTab" role="tabpanel">
   <div class="settings-section">
-    <p class="settings-section-title">Layout &amp; Canvas:</p>
+    <p class="settings-section-title">Stage:</p>
     <div class="settings-section-rows">
       <div class="settings-row-pair">
         <div class="control-row inline">
-          <label for="stageWidth">Layout Size:</label>
+          <label for="stageWidth">Stage Size:</label>
           <div class="font-picker-row">
             <span class="fontsize-field stage-size-field">
-              <input type="number" id="stageWidth" min="120" max="3840" step="10" value="520" aria-label="Layout width in pixels" title="Scroll to adjust" />
+              <input type="number" id="stageWidth" min="120" max="3840" step="10" value="520" aria-label="Stage width in pixels" title="Scroll to adjust" />
             </span>
             <span class="stage-size-x">×</span>
             <span class="fontsize-field stage-size-field">
-              <input type="number" id="stageHeight" min="80" max="2160" step="10" value="200" aria-label="Layout height in pixels" title="Scroll to adjust" />
+              <input type="number" id="stageHeight" min="80" max="2160" step="10" value="200" aria-label="Stage height in pixels" title="Scroll to adjust" />
             </span>
             <span class="unit">px</span>
             <p class="font-picker-note stage-size-note">Set the OBS Browser Source to this size</p>
@@ -3360,9 +3574,9 @@
           <div class="arrowed-select-wrap">
             <select id="marqueeBulbMode" class="marquee-bulb-mode-select arrowed-select" aria-label="Which areas show the scrolling marquee light bulb ring">
               <option value="off">Off</option>
-              <option value="all">All (Elements + Layout)</option>
+              <option value="all">All (Elements + Stage)</option>
               <option value="elements">Elements Only</option>
-              <option value="layout">Layout Only</option>
+              <option value="layout">Stage Only</option>
             </select>
           </div>
         </div>
@@ -3370,11 +3584,12 @@
              (column 2) from its old spot further down (was its own
              feature-row) per request; same combined checkbox+slider
              shape Confetti uses (.control-row-slider-toggle-group). No
-             longer a .feature-row, so wireFeatureRowSliderFlash can't
-             gate Intensity anymore (it needs a .feature-row ancestor and
-             a sibling .feature-row-sliders) — see wireMarqueeBulbFlickerLock
-             in the script instead, same pattern as Confetti's own
-             wireConfettiLock. Bulb Flicker Random tucked into this same
+             longer a .feature-row, so the generic feature-row lock
+             pattern can't gate Intensity anymore (it needs a .feature-row
+             ancestor and a sibling .feature-row-sliders) — see
+             wireMarqueeBulbFlickerLock in the script instead, same
+             pattern as Confetti's own wireConfettiLock. Bulb Flicker
+             Random tucked into this same
              row's top line (top-right), instead of its own row — new
              idea, first one of its kind. Works the same way Accent
              Color's swatches sit at the row's far right today:
@@ -3396,7 +3611,7 @@
             <input type="checkbox" id="marqueeBulbFlickerRandom" class="vs-checkbox" aria-label="Flicker every element's bulbs on its own random timing instead of all in sync; turning this off resyncs everyone to the same shared timing" />
           </span>
           <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0" aria-label="How deep the marquee bulb flicker dips" />
+            <input type="range" id="marqueeBulbFlickerIntensity" min="0" max="1" step="0.05" value="0" aria-label="How deep the marquee bulb flicker dips" data-min-label="None" data-max-label="Lot" />
           </div>
         </div>
       </div>
@@ -3423,15 +3638,15 @@
         </div>
         <div class="control-row control-row--slider">
           <span class="control-row-slider-toggle-group">
-            <label for="marqueeBulbScrollLayout">Layout Scroll:</label>
-            <input type="checkbox" id="marqueeBulbScrollLayout" class="vs-checkbox" aria-label="Scroll the layout's own outer bulb ring; turn off to leave it static in place" />
+            <label for="marqueeBulbScrollLayout">Stage Scroll:</label>
+            <input type="checkbox" id="marqueeBulbScrollLayout" class="vs-checkbox" aria-label="Scroll the stage's own outer bulb ring; turn off to leave it static in place" />
           </span>
           <span class="control-row-slider-toggle-group">
             <label for="marqueeBulbScrollClockwiseLayout">Clockwise:</label>
-            <input type="checkbox" id="marqueeBulbScrollClockwiseLayout" class="vs-checkbox" aria-label="Scroll the layout's own outer bulb ring clockwise instead of the default counter-clockwise" />
+            <input type="checkbox" id="marqueeBulbScrollClockwiseLayout" class="vs-checkbox" aria-label="Scroll the stage's own outer bulb ring clockwise instead of the default counter-clockwise" />
           </span>
           <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbSpeedLayout" min="3" max="225" step="2.22" value="3" aria-label="Scroll speed of the layout's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
+            <input type="range" id="marqueeBulbSpeedLayout" min="3" max="225" step="2.22" value="3" aria-label="Scroll speed of the stage's own outer bulb ring, in pixels per second, independent of every element's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
           </div>
         </div>
       </div>
@@ -3452,7 +3667,7 @@
             <input type="checkbox" id="marqueeBulbScrollClockwise" class="vs-checkbox" aria-label="Scroll the marquee bulbs clockwise instead of the default counter-clockwise" />
           </span>
           <div class="vs-slider-row">
-            <input type="range" id="marqueeBulbSpeedElements" min="3" max="225" step="2.22" value="3" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the layout's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
+            <input type="range" id="marqueeBulbSpeedElements" min="3" max="225" step="2.22" value="3" aria-label="Scroll speed of every element's own bulb ring, in pixels per second, independent of the stage's own ring and of Marquee Scroll Speed" data-min-label="Slow" data-max-label="Fast" />
           </div>
         </div>
       </div>
@@ -3517,30 +3732,79 @@
   </div>
   </div><div class="panel" id="elementsPanel" data-tab="elements" role="tabpanel" style="display:none">
   <div class="settings-section">
-    <p class="settings-section-title">Elements: Drag to Reorder Layer Position, Rename, Resize, or Hide</p>
+    <p class="settings-section-title">Elements: Drag to Reorder Layer Position, Rename, or Hide</p>
+    <div class="settings-section-rows">
     <div class="element-toggles" id="elementToggles"></div>
+    </div>
   </div>
   <div class="settings-section">
     <p class="settings-section-title">Add Custom Elements:</p>
+    <div class="settings-section-rows">
     <div class="add-custom-row">
       <label for="customTextInput">New Text Element:</label>
       <input type="text" class="text-input" id="customTextInput" placeholder="e.g. Follow on Twitch!" />
       <button class="load-fonts-btn" id="addCustomText" type="button">Add</button>
     </div>
     <div class="custom-text-list" id="customTextList"></div>
+    </div>
   </div>
   <div class="settings-section">
     <p class="settings-section-title">Add Marquee Roll: Creates an Element You Can Merge Other Elements Into:</p>
+    <div class="settings-section-rows">
     <div class="add-custom-row">
       <button class="load-fonts-btn" id="addRoll" type="button">New Marquee Roll</button>
     </div>
     <div class="custom-text-list" id="rollList"></div>
+    </div>
   </div>
-  </div><div class="panel" id="importExportPanel" data-tab="importexport" role="tabpanel" style="display:none">
+  </div><div class="panel" id="advancedPanel" data-tab="advanced" role="tabpanel" style="display:none">
   <div class="settings-section">
-    <p class="settings-section-title">Import/Export Layout Settings</p>
+    <p class="settings-section-title">Network Sharing</p>
+    <div class="settings-section-rows">
+    <p class="network-caution">
+      Enable the network share if your OBS is on a different PC. Use the address below to connect to Marquee.
+    </p>
     <div class="control-row inline">
-      <label>Export Layout Settings:</label>
+      <label>1. Enable Network Sharing in FeedBack:</label>
+      <div class="font-picker-row">
+        <button class="load-fonts-btn" id="enableFeedbackLanBtn" type="button">Enable</button>
+        <button class="load-fonts-btn" id="openPluginManagerBtn" type="button">View Network Settings</button>
+        <p class="font-picker-note" id="enableFeedbackLanNote"></p>
+      </div>
+    </div>
+    <div class="control-row inline">
+      <!-- Off by default (server-side, see routes.py's network_access
+           state) — even with FeedBack's own app-wide Network Sharing
+           turned on, Marquee's render/state/layout/ingest routes still
+           reject any non-loopback request until this is also switched
+           on here. Two separate opt-ins on purpose: step 1 (above)
+           controls the whole app being reachable at all, this one
+           controls whether MARQUEE specifically is willing to answer a
+           request that didn't come from this PC. -->
+      <label>2. Share Marquee on Local Network:</label>
+      <div class="font-picker-row">
+        <button class="load-fonts-btn" id="networkAccessToggleBtn" type="button" aria-label="Allow other PCs on this network to reach Marquee's render output and settings">Enable</button>
+      </div>
+    </div>
+    <p class="font-picker-note" id="networkAccessGateNote"></p>
+    <div class="control-row inline">
+      <label for="networkUrlValue">3. Address:</label>
+      <code id="networkUrlValue">Detecting…</code>
+      <div class="font-picker-row">
+        <button class="load-fonts-btn" id="networkUrlCopyBtn" type="button">Copy to Clipboard</button>
+        <p class="font-picker-note" id="networkUrlNote"></p>
+      </div>
+    </div>
+    <p class="network-caution">
+      Turning this on makes Marquee reachable by any device on your local network. There's no serious security risk in normal home use — just leave it off unless you actually need it, and never enable it on a public or shared network (hotel wifi, LAN parties, coworking spaces, etc.).
+    </p>
+    </div>
+  </div>
+  <div class="settings-section">
+    <p class="settings-section-title">Import/Export Settings</p>
+    <div class="settings-section-rows">
+    <div class="control-row inline">
+      <label>Export Stage Settings:</label>
       <div class="font-picker-row">
         <button class="load-fonts-btn" id="downloadBtn" type="button">Export .json</button>
         <button class="load-fonts-btn" id="exportBtn" type="button">Copy to Clipboard</button>
@@ -3548,20 +3812,35 @@
       </div>
     </div>
     <div class="control-row inline">
-      <label for="importFile">Import Layout Settings:</label>
+      <label for="importFile">Import Stage Settings:</label>
       <div class="font-picker-row">
-        <input type="file" class="file-input" id="importFile" accept="application/json,.json" aria-label="Choose a layout .json file to import" />
+        <input type="file" class="file-input" id="importFile" accept="application/json,.json" aria-label="Choose a stage .json file to import" />
         <p class="font-picker-note" id="importFileNote"></p>
       </div>
     </div>
     <div class="control-row inline">
-      <label for="importIn">Paste JSON Layout Settings:</label>
+      <label for="importIn">Paste JSON Stage Settings:</label>
       <div class="font-picker-row">
         <button class="load-fonts-btn" id="importBtn" type="button">Apply</button>
         <p class="font-picker-note" id="importNote"></p>
       </div>
     </div>
-    <textarea id="importIn" class="text-input io-textarea" rows="6" placeholder="Paste exported JSON here, then click Apply." aria-label="Layout JSON to import"></textarea>
+    <textarea id="importIn" class="text-input io-textarea" rows="6" placeholder="Paste exported JSON here, then click Apply." aria-label="Stage JSON to import"></textarea>
+    </div>
+  </div>
+  <div class="settings-section">
+    <p class="settings-section-title">Factory Reset</p>
+    <div class="settings-section-rows">
+    <div class="control-row inline">
+      <label>Restore Built-in Presets:</label>
+      <div class="font-picker-row">
+        <button class="load-fonts-btn" id="restorePresetsBtn" type="button">Restore Presets</button>
+      </div>
+    </div>
+    <p class="network-caution">
+      Resets every built-in preset back to its original default, and brings back any built-in presets you've removed from the dropdown above. Presets you've saved yourself with Save As are not affected.
+    </p>
+    </div>
   </div>
   </div>
   <!-- Grows/shrinks in exact lockstep with every settings-group collapse/
@@ -3574,7 +3853,7 @@
        of the page for as long as anything stays collapsed; per request,
        that's the accepted tradeoff for never pulling the view upward. -->
   <div id="settingsCollapseSpacer" aria-hidden="true" style="height:0;flex-shrink:0;transition:height 0.25s ease;"></div>
-  <script src="render-core.js"></script><script src="presets/standard.js"></script><script src="presets/small.js"></script><script src="presets/tall.js"></script><script src="presets/user.js"></script><script src="presets/rocksniffer-v1.js"></script><script src="presets/rocksniffer-v2.js"></script><script src="presets/rocksniffer-v3.js"></script><script src="presets/rocksniffer-v4.js"></script><script src="presets/crafty-girls.js"></script><script src="presets/the-marquee.js"></script><script src="presets/user-off.js"></script><script src="presets/test.js"></script><script>
+  <script src="render-core.js"></script><script src="presets/standard.js"></script><script src="presets/small.js"></script><script src="presets/tall.js"></script><script src="presets/user.js"></script><script src="presets/crafty-girls.js"></script><script src="presets/the-marquee.js"></script><script src="presets/user-off.js"></script><script>
   // ============================================================
   // 1. DOM refs + state
   // ============================================================
@@ -3631,6 +3910,65 @@
   // delete paths.
   const defaultElementOrder = Object.keys(defaultLayout);
   let elementOrder = [...defaultElementOrder];
+  // The Customize tab's "Stage" entry — the whole-canvas ring/background,
+  // not a real per-element id in `layout` (it has no x/y/width/height, no
+  // #obj-<id> DOM node, and must never enter elementOrder/z-ordering/
+  // export's "elements" list). Kept as its OWN small state object instead
+  // of shoehorning a synthetic id into `layout`, specifically so none of
+  // the many id-keyed functions that assume a real positioned element
+  // (applyLayout, applyOrder, the Elements panel, drag/resize) need a
+  // special case for it. Only 3 settings genuinely apply at the canvas
+  // level — Border Thickness, Edge Rounding, Background Color/
+  // Transparency — see applyStageOverride below for how these turn into
+  // CSS.
+  const STAGE_ID = '__stage';
+  let stageOverride = { useCustomStyles: false, borderWidth: 1.2, edgeRounding: 0, canvasBgColor: '#000000', canvasBgAlpha: 1, accent: '#ff8200' };
+  // Sets/clears --stage-*-override custom properties, which .stage::after
+  // and .stage-canvas-bg read ahead of the plain global --border-width/
+  // --edge-rounding/--canvas-bg-rgb/--canvas-bg-alpha vars (see their CSS
+  // — same var()-fallback-chain pattern as Score's --text-color-override).
+  // Deliberately set on :root, not #stage itself — #stage is the parent
+  // of every .obj element, and CSS custom properties inherit downward, so
+  // an override set directly on #stage would leak into every element's
+  // OWN --border-width/--edge-rounding too. The stage-specific var names
+  // sidestep that entirely: nothing but .stage::after/.stage-canvas-bg
+  // ever reads them.
+  function applyStageOverride() {
+    if (stageOverride.useCustomStyles) {
+      root.style.setProperty('--stage-border-width-override', stageOverride.borderWidth + 'px');
+      root.style.setProperty('--stage-edge-rounding-override', stageOverride.edgeRounding + 'px');
+      root.style.setProperty('--stage-canvas-bg-rgb-override', MarqueeCore.hexToRgbChannels(stageOverride.canvasBgColor));
+      root.style.setProperty('--stage-canvas-bg-alpha-override', String(stageOverride.canvasBgAlpha));
+      root.style.setProperty('--stage-accent-override', stageOverride.accent);
+    } else {
+      root.style.removeProperty('--stage-border-width-override');
+      root.style.removeProperty('--stage-edge-rounding-override');
+      root.style.removeProperty('--stage-canvas-bg-rgb-override');
+      root.style.removeProperty('--stage-canvas-bg-alpha-override');
+      root.style.removeProperty('--stage-accent-override');
+    }
+  }
+  // Restores stageOverride from a preset/import's own `source.stageOverride`
+  // (a sibling of `source.visuals`/`source.layout`, not inside either) —
+  // called alongside every applyImportedVisuals() call site (preset load,
+  // import, Reset to Defaults). Unconditional assignment with real
+  // defaults, not a sparse merge — same fix as marqueeScoreColorGradient's
+  // own export-completeness bug (see [[marquee-score-gradient-export-gap]]
+  // in project memory): a preset/import that doesn't mention stageOverride
+  // at all must reset to genuinely OFF, not silently keep whatever the
+  // previously active preset had left it at.
+  function restoreStageOverride(source) {
+    const so = (source && typeof source.stageOverride === 'object' && source.stageOverride) || null;
+    stageOverride = {
+      useCustomStyles: !!(so && so.useCustomStyles),
+      borderWidth: (so && typeof so.borderWidth === 'number') ? so.borderWidth : 1.2,
+      edgeRounding: (so && typeof so.edgeRounding === 'number') ? so.edgeRounding : 0,
+      canvasBgColor: (so && typeof so.canvasBgColor === 'string' && HEX_COLOR_RE.test(so.canvasBgColor)) ? so.canvasBgColor : '#000000',
+      canvasBgAlpha: (so && typeof so.canvasBgAlpha === 'number') ? so.canvasBgAlpha : 1,
+      accent: (so && typeof so.accent === 'string' && HEX_COLOR_RE.test(so.accent)) ? so.accent : '#ff8200',
+    };
+    applyStageOverride();
+  }
   // ============================================================
   // Per-element visual overrides — lets ONE element look/behave
   // differently from the rest without a separate global setting for
@@ -3734,7 +4072,7 @@
     { key: 'marqueeBulbScroll', label: 'Element Scroll', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbSpeedElements', 'marqueeBulbScrollClockwise'] },
     { key: 'marqueeBulbScrollClockwise', label: 'Clockwise', type: 'checkbox', section: 'Marquee Bulbs' },
     { key: 'marqueeBulbFlicker', label: 'Bulb Flicker', type: 'checkbox', section: 'Marquee Bulbs', dependents: ['marqueeBulbFlickerIntensity'] },
-    { key: 'marqueeBulbFlickerIntensity', label: 'Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05, section: 'Marquee Bulbs' },
+    { key: 'marqueeBulbFlickerIntensity', label: 'Bulb Flicker Intensity', type: 'range', min: 0, max: 1, step: 0.05, section: 'Marquee Bulbs', minLabel: 'None', maxLabel: 'Lot' },
     { key: 'marqueeBulbFlickerRandom', label: 'Random', type: 'checkbox', section: 'Marquee Bulbs', dependents: [] },
   ];
   // Section/pair layout for the Customize tab is now hand-specified in
@@ -3760,6 +4098,22 @@
   // Disable restores exactly what was there before rather than
   // re-seeding over it.
   function enableElementCustomization(id) {
+    if (id === STAGE_ID) {
+      stageOverride.useCustomStyles = true;
+      // Seed from Global's current values, same idea as every real
+      // element's own seed-from-globalFallbackFor loop just below — so
+      // flipping this on starts from what's already on screen, not a
+      // hardcoded default.
+      stageOverride.borderWidth = visuals.borderWidth;
+      stageOverride.edgeRounding = visuals.edgeRounding;
+      stageOverride.canvasBgColor = visuals.canvasBgColor;
+      stageOverride.canvasBgAlpha = visuals.canvasBgAlpha;
+      stageOverride.accent = visuals.accent;
+      applyStageOverride();
+      refreshCustomizeOverrideBadge();
+      refreshCustomizeOptionLabel(STAGE_ID);
+      return;
+    }
     if (!layout[id]) return;
     layout[id].useCustomStyles = true;
     if (!layout[id].styleOverrides) layout[id].styleOverrides = {};
@@ -3784,11 +4138,19 @@
     // resyncElementBulbDelay's own comment.
     MarqueeCore.resyncElementBulbDelay(id, layout, visuals);
     refreshCustomizeOverrideBadge();
+    refreshCustomizeOptionLabel(id);
   }
   // Turns customization OFF without discarding the values — flipping
   // back on (above) restores them rather than starting from scratch.
   // resetElementToGlobal below is the actual hard clear.
   function disableElementCustomization(id) {
+    if (id === STAGE_ID) {
+      stageOverride.useCustomStyles = false;
+      applyStageOverride();
+      refreshCustomizeOverrideBadge();
+      refreshCustomizeOptionLabel(STAGE_ID);
+      return;
+    }
     if (!layout[id]) return;
     layout[id].useCustomStyles = false;
     MarqueeCore.applyElementStyleOverrides(document.getElementById('obj-' + id), layout, visuals, id);
@@ -3796,12 +4158,38 @@
     setupAllTickers();
     MarqueeCore.resyncElementBulbDelay(id, layout, visuals);
     refreshCustomizeOverrideBadge();
+    refreshCustomizeOptionLabel(id);
+  }
+  // Shared by Global's #scoreColorGradient checkbox, Customize's redundant
+  // #customize-scoreColorGradient copy, and setElementOverrideValue's own
+  // auto-uncheck above — the single place that both syncs the two
+  // checkboxes AND, when turning the gradient back ON, clears Score's
+  // textColor override so it doesn't keep winning --text-color-override's
+  // priority chain out from under the just-re-enabled gradient.
+  function setScoreColorGradient(enabled) {
+    visuals.marqueeScoreColorGradient = enabled;
+    const globalCheckbox = document.getElementById('scoreColorGradient');
+    if (globalCheckbox) globalCheckbox.checked = enabled;
+    const customizeCheckbox = document.getElementById('customize-scoreColorGradient');
+    if (customizeCheckbox) customizeCheckbox.checked = enabled;
+    if (enabled && layout.score && layout.score.styleOverrides && 'textColor' in layout.score.styleOverrides) {
+      delete layout.score.styleOverrides.textColor;
+      MarqueeCore.applyElementStyleOverrides(document.getElementById('obj-score'), layout, visuals, 'score');
+      if (document.getElementById('customizeElementSelect').value === 'score') renderCustomizeSettingRows();
+    }
   }
   function setElementOverrideValue(id, key, value) {
     if (!layout[id] || !layout[id].styleOverrides) return;
     layout[id].styleOverrides[key] = value;
     if (key === 'accent') layout[id].styleOverrides.accentRgb = MarqueeCore.hexToRgbChannels(value);
     if (key === 'chipColor') layout[id].styleOverrides.chipRgb = MarqueeCore.hexToRgbChannels(value);
+    // Score Color Gradient and a Customize textColor override both drive
+    // --text-color-override (see .stat-value-percent's own priority chain
+    // comment) — the override always wins once set, silently making the
+    // gradient checkbox look on but do nothing. Manually setting Score's
+    // text color is a clearer signal of intent than the gradient, which
+    // was likely just left on from a preset, so it yields automatically.
+    if (id === 'score' && key === 'textColor' && visuals.marqueeScoreColorGradient) setScoreColorGradient(false);
     MarqueeCore.applyElementStyleOverrides(document.getElementById('obj-' + id), layout, visuals, id);
     MarqueeCore.applyDecorativeBulbs(layout, visuals);
     setupAllTickers();
@@ -3827,6 +4215,13 @@
   // preset's baked-in state, overrides included) and from
   // disableElementCustomization above (which keeps the values around).
   function resetElementToGlobal(id) {
+    if (id === STAGE_ID) {
+      stageOverride = { useCustomStyles: false, borderWidth: 1.2, edgeRounding: 0, canvasBgColor: '#000000', canvasBgAlpha: 1, accent: '#ff8200' };
+      applyStageOverride();
+      refreshCustomizeOverrideBadge();
+      refreshCustomizeOptionLabel(STAGE_ID);
+      return;
+    }
     if (!layout[id]) return;
     layout[id].useCustomStyles = false;
     delete layout[id].styleOverrides;
@@ -3835,6 +4230,7 @@
     setupAllTickers();
     MarqueeCore.resyncElementBulbDelay(id, layout, visuals);
     refreshCustomizeOverrideBadge();
+    refreshCustomizeOptionLabel(id);
   }
   // Presets — each has two snapshots:
   // - default: fixed, only ever changed by editing this object in code.
@@ -3857,11 +4253,18 @@
     };
   }
   function clonePresetSnapshot(snapshot) {
-    return {
+    const clone = {
       layout: JSON.parse(JSON.stringify(snapshot.layout)),
       visuals: JSON.parse(JSON.stringify(snapshot.visuals)),
       order: [...snapshot.order],
     };
+    // Pre-dates stageOverride (added later) — every built-in preset's own
+    // `default` here still never carries one, so this was never missed
+    // until Save As/Restore Presets started passing snapshots that DO
+    // have a real stageOverride through this same function. Copy it when
+    // present so it isn't silently dropped for those.
+    if (snapshot.stageOverride) clone.stageOverride = JSON.parse(JSON.stringify(snapshot.stageOverride));
+    return clone;
   }
   const PRESETS = {};
   {
@@ -3893,38 +4296,6 @@
     PRESETS.User = { default: userDef, current: clonePresetSnapshot(userDef) };
   }
   {
-    const v1Def = {
-      layout: JSON.parse(JSON.stringify(rocksnifferV1DefaultLayout)),
-      visuals: JSON.parse(JSON.stringify(rocksnifferV1DefaultVisuals)),
-      order: Object.keys(rocksnifferV1DefaultLayout),
-    };
-    PRESETS.RocksnifferV1 = { default: v1Def, current: clonePresetSnapshot(v1Def) };
-  }
-  {
-    const v2Def = {
-      layout: JSON.parse(JSON.stringify(rocksnifferV2DefaultLayout)),
-      visuals: JSON.parse(JSON.stringify(rocksnifferV2DefaultVisuals)),
-      order: Object.keys(rocksnifferV2DefaultLayout),
-    };
-    PRESETS.RocksnifferV2 = { default: v2Def, current: clonePresetSnapshot(v2Def) };
-  }
-  {
-    const v3Def = {
-      layout: JSON.parse(JSON.stringify(rocksnifferV3DefaultLayout)),
-      visuals: JSON.parse(JSON.stringify(rocksnifferV3DefaultVisuals)),
-      order: Object.keys(rocksnifferV3DefaultLayout),
-    };
-    PRESETS.RocksnifferV3 = { default: v3Def, current: clonePresetSnapshot(v3Def) };
-  }
-  {
-    const v4Def = {
-      layout: JSON.parse(JSON.stringify(rocksnifferV4DefaultLayout)),
-      visuals: JSON.parse(JSON.stringify(rocksnifferV4DefaultVisuals)),
-      order: Object.keys(rocksnifferV4DefaultLayout),
-    };
-    PRESETS.Rocksniffer = { default: v4Def, current: clonePresetSnapshot(v4Def) };
-  }
-  {
     const craftyGirlsDef = {
       layout: JSON.parse(JSON.stringify(craftyGirlsDefaultLayout)),
       visuals: JSON.parse(JSON.stringify(craftyGirlsDefaultVisuals)),
@@ -3948,15 +4319,19 @@
     };
     PRESETS.UserOff = { default: userOffDef, current: clonePresetSnapshot(userOffDef) };
   }
-  {
-    const testDef = {
-      layout: JSON.parse(JSON.stringify(testDefaultLayout)),
-      visuals: JSON.parse(JSON.stringify(testDefaultVisuals)),
-      order: Object.keys(testDefaultLayout),
-    };
-    PRESETS.Test = { default: testDef, current: clonePresetSnapshot(testDef) };
-  }
   const presetSelect = document.getElementById('presetSelect');
+  // Permanent registry of every built-in preset's original default
+  // snapshot + dropdown label, captured once here — before the plugin
+  // integration script below can ever hide one (Delete Preset) by removing
+  // its <option> and PRESETS entry. Advanced tab's "Restore Presets"
+  // button reads this to rebuild a hidden built-in from scratch, since
+  // once hidden PRESETS itself no longer has anywhere to restore it from.
+  const BUILTIN_PRESET_REGISTRY = {};
+  Array.prototype.forEach.call(presetSelect.options, (opt) => {
+    if (PRESETS[opt.value]) {
+      BUILTIN_PRESET_REGISTRY[opt.value] = { label: opt.textContent, default: clonePresetSnapshot(PRESETS[opt.value].default) };
+    }
+  });
   // Tracks which preset was selected before a 'change' event, so switching
   // presets can flush any not-yet-autosaved edits into the OUTGOING preset
   // first — presetSelect.value has already moved to the new preset by the
@@ -3985,6 +4360,7 @@
       layout: snapshotLayout,
       visuals: JSON.parse(JSON.stringify(visuals)),
       order: snapshotOrder,
+      stageOverride: JSON.parse(JSON.stringify(stageOverride)),
     };
   }
   // Loads a preset's saved (`current`) state onto the canvas — used both
@@ -4032,6 +4408,7 @@
     applyLayout();
     applyOrder();
     applyImportedVisuals(preset.current.visuals);
+    restoreStageOverride(preset.current);
     syncAllNames();
     setupAllTickers();
     rebuildElementToggles();
@@ -4375,6 +4752,7 @@
       order: elementOrder,
       elements: layout,
       visuals,
+      stageOverride,
     }, null, 2);
   }
   // Restores a previously exported (or hand-written, or shared by someone
@@ -4614,6 +4992,7 @@
     if (data.visuals && typeof data.visuals === 'object' && !Array.isArray(data.visuals)) {
       applyImportedVisuals(data.visuals);
     }
+    restoreStageOverride(data);
     syncAllNames();
     setupAllTickers();
     rebuildElementToggles();
@@ -4907,9 +5286,9 @@
     document.querySelectorAll('#globalSettingsTab input[type="range"]').forEach(syncSliderFill);
     // Same story as the syncSliderFill line above: marqueeScroll/Sparkle/
     // BulbFlicker/BulbScroll/BulbMode were all set directly too, so the
-    // feature-row-slider disabled/greyed state each one gates (see
-    // wireFeatureRowSliderFlash/wireFeatureRowSliderLockFromSelect) is
-    // stale until forced to recompute here.
+    // feature-row-slider disabled/greyed state each one gates (see the
+    // wire*Lock functions near their own gating controls) is stale until
+    // forced to recompute here.
     refreshFeatureRowLocks();
   }
   // ============================================================
@@ -5620,6 +5999,14 @@
               MarqueeCore.resolveRollGroups(layout, visuals);
             }
           }
+          // Customize tab's dropdown is alphabetized by label (see
+          // refreshCustomizeElementDropdown) — a rename can change sort
+          // order, not just the text, so it needs a live re-sort on every
+          // keystroke here too. Safe to call on every keystroke: it only
+          // rebuilds the SELECT's own options (preserving whichever id is
+          // currently selected via its own `prev` handling), never touches
+          // this rename <input> itself, so typing focus is untouched.
+          refreshCustomizeElementDropdown();
           renderJson();
         });
         row.appendChild(nameInput);
@@ -5723,7 +6110,21 @@
   // version had a toggle on every individual row; reported live as
   // unwanted).
   // ============================================================
+  // Updates just the one <option>'s text in place (its "*" suffix) —
+  // called after enable/disable/reset instead of rebuilding the whole
+  // dropdown via refreshCustomizeElementDropdown, which would also force
+  // a redundant renderCustomizeSettingRows() call these functions already
+  // trigger their own effects for.
+  function refreshCustomizeOptionLabel(id) {
+    const select = document.getElementById('customizeElementSelect');
+    if (!select) return;
+    const opt = Array.from(select.options).find((o) => o.value === id);
+    if (!opt) return;
+    const useCustom = id === STAGE_ID ? stageOverride.useCustomStyles : (layout[id] && layout[id].useCustomStyles);
+    if (id === STAGE_ID || layout[id]) opt.textContent = customizeElementLabel(id) + (useCustom ? ' *' : '');
+  }
   function customizeElementLabel(id) {
+    if (id === STAGE_ID) return 'Stage';
     if (layout[id] && layout[id].name) return layout[id].name;
     const el = document.getElementById('obj-' + id);
     return (el && el.dataset.label) || id;
@@ -5733,14 +6134,27 @@
     if (!select) return;
     const prev = select.value;
     select.innerHTML = '';
-    elementOrder.forEach((id) => {
-      if (!layout[id]) return;
+    // Alphabetized by CURRENT label (not element id or creation order) —
+    // per request, since a user can rename an element at any time (see
+    // the Elements panel rename input's own refreshCustomizeElementDropdown
+    // call, right after it updates layout[id].name) and the dropdown needs
+    // to re-sort live along with that, not just re-label the option in
+    // place. Stage is included in the same sort, not pinned — nothing
+    // about it is exempted from "alphabetized."
+    const entries = [{ id: STAGE_ID, useCustom: stageOverride.useCustomStyles }]
+      .concat(elementOrder.filter((id) => layout[id]).map((id) => ({ id, useCustom: !!layout[id].useCustomStyles })));
+    entries.sort((a, b) => customizeElementLabel(a.id).localeCompare(customizeElementLabel(b.id), undefined, { sensitivity: 'base' }));
+    entries.forEach(({ id, useCustom }) => {
       const opt = document.createElement('option');
       opt.value = id;
-      opt.textContent = customizeElementLabel(id);
+      opt.textContent = customizeElementLabel(id) + (useCustom ? ' *' : '');
       select.appendChild(opt);
     });
-    select.value = elementOrder.includes(prev) ? prev : (elementOrder[0] || '');
+    const allValues = entries.map((e) => e.id);
+    // First item in the now-ALPHABETIZED list, not elementOrder[0] (which
+    // is z-order/creation order — usually Marquee Roll 1 — and no longer
+    // matches what's actually visually first in the dropdown).
+    select.value = allValues.includes(prev) ? prev : (allValues[0] || STAGE_ID);
     syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
     refreshCustomizeOverrideBadge();
@@ -5759,7 +6173,11 @@
     const onGlobalTab = document.getElementById('settingsTabGlobalBtn').classList.contains('active');
     if (!onGlobalTab) return;
     const count = elementOrder.filter((id) => layout[id] && layout[id].useCustomStyles).length;
-    note.textContent = 'Global settings do not overwrite customize settings. ' + count + ' elements have Customized overrides enabled.';
+    // innerHTML, not textContent — bold+underline the count and "Elements"
+    // per request. Safe here: `count` is always a plain number derived
+    // from elementOrder.length, never anything user-typed/untrusted.
+    note.innerHTML = 'There are <strong><u class="note-count">' + count + ' Elements</u></strong> with custom settings that do not respond to global settings. See Customize tab to edit.';
+    note.classList.toggle('has-overrides', count > 0);
   }
   // Mirrors the CURRENTLY SELECTED element's own useCustomStyles flag
   // onto the one shared toggle — called whenever the selected element
@@ -5770,7 +6188,7 @@
     const toggle = document.getElementById('customizeEnableToggle');
     if (!select || !toggle) return;
     const id = select.value;
-    toggle.checked = !!(layout[id] && layout[id].useCustomStyles);
+    toggle.checked = id === STAGE_ID ? stageOverride.useCustomStyles : !!(layout[id] && layout[id].useCustomStyles);
   }
   // Flashes the Enable Customizations band red — the visible answer to
   // "why didn't my click do anything" when clicking a disabled setting row
@@ -5778,62 +6196,23 @@
   // re-add so rapid repeat clicks each get their own flash instead of the
   // second click silently no-op'ing against an already-present class.
   function flashCustomizeEnableBand() {
-    const band = document.getElementById('customizeEnableBand');
-    if (!band) return;
-    band.classList.remove('enable-flash');
-    void band.offsetWidth;
-    band.classList.add('enable-flash');
+    flashRowClass(document.getElementById('customizeEnableBand'), 'enable-flash');
   }
   // Generalizes the Global tab's own checkbox+slider feature-rows
   // (Confetti, Text Scroll, Stars, Bulb Flicker, Bulb Scroll) to match the
   // Customize tab's identical mechanism: each dependent slider is
   // genuinely disabled/greyed out until its own checkbox is on.
-  function wireFeatureRowSliderFlash(checkboxId) {
-    const checkbox = document.getElementById(checkboxId);
-    const row = checkbox && checkbox.closest('.feature-row');
-    const sliders = row && row.querySelector('.feature-row-sliders');
-    if (!checkbox || !row || !sliders) return;
-    function sync() {
-      const enabled = checkbox.checked;
-      sliders.querySelectorAll('.feature-row-slider').forEach((wrap) => {
-        wrap.classList.toggle('feature-slider-locked', !enabled);
-        wrap.querySelectorAll('input, select').forEach((el) => { el.disabled = !enabled; });
-      });
-    }
-    checkbox.addEventListener('change', sync);
-    sync();
-    featureRowLockSyncs.push(sync);
-  }
-  // Same idea as wireFeatureRowSliderFlash, for the one Global-tab feature
-  // gated by a <select> instead of a checkbox — Bulb Mode. Bulb Size/Bulb
-  // Gap are greyed out/non-interactive whenever Bulb Mode is "off",
-  // enabled for any other value (All/Elements Only/Layout Only).
-  function wireFeatureRowSliderLockFromSelect(selectId, offValue) {
-    const select = document.getElementById(selectId);
-    const row = select && select.closest('.feature-row');
-    const sliders = row && row.querySelector('.feature-row-sliders');
-    if (!select || !row || !sliders) return;
-    function sync() {
-      const enabled = select.value !== offValue;
-      sliders.querySelectorAll('.feature-row-slider').forEach((wrap) => {
-        wrap.classList.toggle('feature-slider-locked', !enabled);
-        wrap.querySelectorAll('input, select').forEach((el) => { el.disabled = !enabled; });
-      });
-    }
-    select.addEventListener('change', sync);
-    sync();
-    featureRowLockSyncs.push(sync);
-  }
-  // wireFeatureRowSliderFlash/wireFeatureRowSliderLockFromSelect only ever
-  // re-run their own dependent-slider disabled state on a real 'change'
+  // Each real feature-row lock-wiring function (wireConfettiLock and the
+  // others further below, near their own gating controls) only ever
+  // re-runs its own dependent-slider disabled state on a real 'change'
   // event fired at the gating checkbox/select. Preset loads and imports
   // (applyImportedVisuals) set .checked/.value on those same gating
   // controls directly, without dispatching 'change' — so a slider that was
   // greyed out under the previous preset stayed greyed out even after
-  // switching to a preset where the gate is genuinely on. Each wire*
-  // function above pushes its own `sync` closure here so
-  // refreshFeatureRowLocks() can force every gate to recompute its
-  // dependents' disabled state after any programmatic load.
+  // switching to a preset where the gate is genuinely on. Each of those
+  // functions pushes its own `sync` closure here so refreshFeatureRowLocks()
+  // can force every gate to recompute its dependents' disabled state after
+  // any programmatic load.
   const featureRowLockSyncs = [];
   function refreshFeatureRowLocks() {
     featureRowLockSyncs.forEach((sync) => sync());
@@ -6204,8 +6583,7 @@
     input.className = 'vs-checkbox';
     input.checked = !!visuals.marqueeScoreColorGradient;
     input.addEventListener('change', () => {
-      visuals.marqueeScoreColorGradient = input.checked;
-      document.getElementById('scoreColorGradient').checked = input.checked;
+      setScoreColorGradient(input.checked);
     });
     toggle.append(label, input);
     const sliders = document.createElement('div');
@@ -6253,13 +6631,10 @@
       mainGroup.classList.add('toggle-disabled');
       row.addEventListener('click', () => flashMarqueeScrollToggle('customize-marqueeScroll'));
     }
-    // Cursor-hover grouping with Text Scroll's row is wired by the CALLER
-    // (CUSTOMIZE_ROW_LAYOUT, from its own in-memory row references)
-    // instead of here — unlike the click handler above, wireMarqueeGroupHover
-    // attaches its listeners immediately, synchronously, at construction
-    // time, when this row (and Text Scroll's) is still a detached element
-    // no getElementById lookup can find; doing it here always silently
-    // no-opped (wireMarqueeGroupHover's own null guard swallows it).
+    // Cursor-hover grouping with Text Scroll's row was removed per
+    // request — each row highlights independently now, same as every
+    // other row (was wireMarqueeGroupHover, wired by the CALLER off its
+    // own in-memory row references; no longer called).
     const mainIsUncheckedBox = mainControl instanceof HTMLInputElement && mainControl.type === 'checkbox' && !mainControl.checked;
     // Checkbox dependents (only Clockwise today) land on the row's own top
     // line as a second toggle-group — the row's space-between pushes it to
@@ -6310,20 +6685,246 @@
     });
     return row;
   }
+  // The "Stage" entry's own small, self-contained renderer — deliberately
+  // NOT routed through OVERRIDABLE_SETTINGS/buildCustomizeControl/
+  // setElementOverrideValue (all keyed by a real `layout[id]`), since
+  // Stage isn't a real positioned element and only ever has these 3
+  // settings. Binds straight to `stageOverride` and applyStageOverride()
+  // instead. Split into TWO cards — Layout & Canvas and Color & Font —
+  // NOT one made-up "Stage" card, per the same rule every other
+  // Customize row already follows (see CUSTOMIZE_ROW_LAYOUT's own
+  // comment): each setting sits in the SAME card, paired with the SAME
+  // neighbor slot, as its Global counterpart. Background Color/
+  // Transparency and Border Thickness/Edge Rounding live in Global's
+  // Layout & Canvas card; Accent Color lives in Global's Color & Font
+  // card. Each row's Global-side pair partner (Element Color/
+  // Transparency, Fade Edge of Text, Score Color Gradient) has no Stage
+  // equivalent, so those slots render empty, same treatment as any other
+  // Customize row with no partner.
+  function renderStageCustomizeRows(container) {
+    const useCustom = !!stageOverride.useCustomStyles;
+    const disabledClass = useCustom ? '' : ' is-disabled';
+
+    // Accent Color — same swatches-plus-custom-picker shape as Global's
+    // own #swatches row / renderCustomizePlainRow's 'accent' branch, bound
+    // to stageOverride.accent instead of a real element's styleOverrides.
+    const accentRow = document.createElement('div');
+    accentRow.className = 'control-row customize-setting-row' + disabledClass;
+    const accentLabel = document.createElement('label');
+    accentLabel.textContent = 'Accent Color:';
+    const accentSwatches = document.createElement('div');
+    accentSwatches.className = 'swatches';
+    const accentSwatchBtns = [];
+    ACCENT_SWATCHES.forEach((s) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'swatch';
+      btn.style.background = s.hex;
+      btn.setAttribute('aria-pressed', String(stageOverride.accent === s.hex));
+      btn.setAttribute('aria-label', s.label);
+      btn.disabled = !useCustom;
+      btn.addEventListener('click', () => {
+        if (!stageOverride.useCustomStyles) return;
+        accentSwatchBtns.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+        btn.setAttribute('aria-pressed', 'true');
+        accentPicker.value = s.hex;
+        stageOverride.accent = s.hex;
+        applyStageOverride();
+      });
+      accentSwatchBtns.push(btn);
+      accentSwatches.appendChild(btn);
+    });
+    const accentPicker = document.createElement('input');
+    accentPicker.type = 'color';
+    accentPicker.className = 'color-input';
+    accentPicker.id = 'customize-stageAccent';
+    accentPicker.value = stageOverride.accent;
+    accentPicker.disabled = !useCustom;
+    accentPicker.setAttribute('aria-label', 'Custom accent color');
+    accentPicker.addEventListener('input', () => {
+      if (!stageOverride.useCustomStyles) return;
+      accentSwatchBtns.forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      stageOverride.accent = accentPicker.value;
+      applyStageOverride();
+    });
+    accentSwatches.appendChild(accentPicker);
+    accentRow.append(accentLabel, accentSwatches);
+    const accentEmpty = document.createElement('div');
+    accentEmpty.className = 'control-row';
+    const accentPair = document.createElement('div');
+    accentPair.className = 'settings-row-pair';
+    accentPair.append(accentRow, accentEmpty);
+
+    const bgRow = document.createElement('div');
+    bgRow.className = 'control-row control-row--slider control-row--color-slider customize-setting-row' + disabledClass;
+    const bgLabel = document.createElement('label');
+    bgLabel.textContent = 'Background Color/Transparency:';
+    bgLabel.htmlFor = 'customize-stageCanvasBgAlpha';
+    const bgColor = document.createElement('input');
+    bgColor.type = 'color';
+    bgColor.className = 'color-input';
+    bgColor.id = 'customize-stageCanvasBgColor';
+    bgColor.value = stageOverride.canvasBgColor;
+    bgColor.disabled = !useCustom;
+    const bgAlphaRow = document.createElement('div');
+    bgAlphaRow.className = 'vs-slider-row';
+    const bgAlpha = document.createElement('input');
+    bgAlpha.type = 'range';
+    bgAlpha.id = 'customize-stageCanvasBgAlpha';
+    bgAlpha.min = '0'; bgAlpha.max = '1'; bgAlpha.step = '0.02';
+    bgAlpha.value = String(stageOverride.canvasBgAlpha);
+    bgAlpha.disabled = !useCustom;
+    bgColor.addEventListener('input', () => {
+      if (!stageOverride.useCustomStyles) return;
+      stageOverride.canvasBgColor = bgColor.value;
+      applyStageOverride();
+    });
+    bgAlpha.addEventListener('input', () => {
+      if (!stageOverride.useCustomStyles) return;
+      stageOverride.canvasBgAlpha = parseFloat(bgAlpha.value);
+      applyStageOverride();
+    });
+    bgAlphaRow.appendChild(bgAlpha);
+    bgRow.append(bgLabel, bgColor, bgAlphaRow);
+    const bgPair = document.createElement('div');
+    bgPair.className = 'settings-row-pair';
+    const bgEmpty = document.createElement('div');
+    bgEmpty.className = 'control-row';
+    bgPair.append(bgRow, bgEmpty);
+
+    const borderRow = document.createElement('div');
+    borderRow.className = 'control-row control-row--slider customize-setting-row' + disabledClass;
+    const borderLabel = document.createElement('label');
+    borderLabel.textContent = 'Border Thickness:';
+    borderLabel.htmlFor = 'customize-stageBorderWidth';
+    const borderSliderRow = document.createElement('div');
+    borderSliderRow.className = 'vs-slider-row';
+    const borderInput = document.createElement('input');
+    borderInput.type = 'range';
+    borderInput.id = 'customize-stageBorderWidth';
+    borderInput.min = '0'; borderInput.max = '6'; borderInput.step = '0.3';
+    borderInput.value = String(stageOverride.borderWidth);
+    borderInput.disabled = !useCustom;
+    borderInput.dataset.minLabel = 'None';
+    borderInput.dataset.maxLabel = 'Thick';
+    borderInput.addEventListener('input', () => {
+      if (!stageOverride.useCustomStyles) return;
+      stageOverride.borderWidth = parseFloat(borderInput.value);
+      applyStageOverride();
+    });
+    borderSliderRow.appendChild(borderInput);
+    borderRow.append(borderLabel, borderSliderRow);
+
+    const roundingRow = document.createElement('div');
+    roundingRow.className = 'control-row control-row--slider customize-setting-row' + disabledClass;
+    const roundingLabel = document.createElement('label');
+    roundingLabel.textContent = 'Edge Rounding:';
+    roundingLabel.htmlFor = 'customize-stageEdgeRounding';
+    const roundingSliderRow = document.createElement('div');
+    roundingSliderRow.className = 'vs-slider-row';
+    const roundingInput = document.createElement('input');
+    roundingInput.type = 'range';
+    roundingInput.id = 'customize-stageEdgeRounding';
+    roundingInput.min = '0'; roundingInput.max = '20'; roundingInput.step = '1';
+    roundingInput.value = String(stageOverride.edgeRounding);
+    roundingInput.disabled = !useCustom;
+    roundingInput.dataset.minLabel = 'None';
+    roundingInput.dataset.maxLabel = 'Rounded';
+    roundingInput.addEventListener('input', () => {
+      if (!stageOverride.useCustomStyles) return;
+      stageOverride.edgeRounding = parseFloat(roundingInput.value);
+      applyStageOverride();
+    });
+    roundingSliderRow.appendChild(roundingInput);
+    roundingRow.append(roundingLabel, roundingSliderRow);
+
+    const borderPair = document.createElement('div');
+    borderPair.className = 'settings-row-pair';
+    borderPair.append(borderRow, roundingRow);
+
+    const layoutSection = document.createElement('div');
+    layoutSection.className = 'settings-section';
+    const layoutTitle = document.createElement('p');
+    layoutTitle.className = 'settings-section-title';
+    layoutTitle.textContent = 'Stage:';
+    const layoutRows = document.createElement('div');
+    layoutRows.className = 'settings-section-rows';
+    layoutRows.append(bgPair, borderPair);
+    layoutSection.append(layoutTitle, layoutRows);
+
+    const colorSection = document.createElement('div');
+    colorSection.className = 'settings-section';
+    const colorTitle = document.createElement('p');
+    colorTitle.className = 'settings-section-title';
+    colorTitle.textContent = 'Color & Font:';
+    const colorRows = document.createElement('div');
+    colorRows.className = 'settings-section-rows';
+    colorRows.append(accentPair);
+    colorSection.append(colorTitle, colorRows);
+
+    container.append(layoutSection, colorSection);
+  }
   function renderCustomizeSettingRows() {
     const select = document.getElementById('customizeElementSelect');
     const container = document.getElementById('customizeSettingsRows');
     if (!select || !container) return;
     const id = select.value;
     container.innerHTML = '';
+    if (id === STAGE_ID) {
+      renderStageCustomizeRows(container);
+      container.querySelectorAll('input[type="range"]').forEach(enhanceSlider);
+      applyCollapsedSectionState(container);
+      return;
+    }
     if (!id || !layout[id]) return;
     const useCustom = !!layout[id].useCustomStyles;
     const byKey = {};
     OVERRIDABLE_SETTINGS.forEach((s) => { byKey[s.key] = s; });
-    const buildFeature = (key, depKeys) => renderCustomizeFeatureRow(id, byKey[key], (depKeys || []).map((k) => byKey[k]), useCustom);
-    const buildPlain = (key) => renderCustomizePlainRow(id, byKey[key], useCustom);
-    const buildInlineCheckbox = (key) => renderCustomizeInlineCheckboxRow(id, byKey[key], useCustom);
-    const emptyCell = () => { const d = document.createElement('div'); d.className = 'control-row'; return d; };
+    // Settings that structurally cannot do anything for a given element's
+    // own markup — not "off by default," genuinely no code path reads the
+    // CSS var/class this setting would set for these ids at all. Confirmed
+    // one at a time by reading each element's actual DOM/CSS, not guessed:
+    //   - art: no text/ticker content whatsoever (just an <img>), so every
+    //     text-styling and ticker-effect setting is inert. Bulbs still
+    //     apply (they trace ANY element's perimeter, ticker or not) and
+    //     stay off this list on purpose.
+    //   - progress/info/custom-*: have real text, just no SEPARATE header
+    //     caption element the way Tuning/Year/Path/Album/Score
+    //     (.stat-label) or Now Playing (.eyebrow-standalone) do — so
+    //     headerTextColor/elementHeadSize have nothing to color/size.
+    //   - nowplaying: the mirror image of that — its ONE line of text
+    //     (.eyebrow-standalone) plays the "header" role Tuning/Path/Year/
+    //     Score's own captions do (reads --element-head-size/
+    //     --header-text-color, confirmed in its own CSS comment), but has
+    //     no separate "value" text — so elementTextSize/textColor (which
+    //     only a VALUE line would read) have nothing to size/color.
+    // marqueeRoll intentionally left alone (not audited/filtered) — its
+    // merged banner text bakes each member's own header into the combined
+    // string rather than a separately-styled header element, and whether
+    // these settings do anything meaningful there wasn't confirmed live.
+    const ART_NA_KEYS = ['textColor', 'headerTextColor', 'font', 'elementTextSize', 'elementHeadSize',
+      'bold', 'italic', 'underline', 'marqueeScroll', 'marqueeScrollSpeed', 'marqueeEdgeFade',
+      'marqueeSparkle', 'marqueeSparkleSize'];
+    const NO_HEADER_NA_KEYS = ['headerTextColor', 'elementHeadSize'];
+    const NO_VALUE_NA_KEYS = ['elementTextSize', 'textColor'];
+    const naKeys = id === 'art' ? new Set(ART_NA_KEYS)
+      : (id === 'progress' || id === 'info' || id.startsWith('custom-')) ? new Set(NO_HEADER_NA_KEYS)
+      : id === 'nowplaying' ? new Set(NO_VALUE_NA_KEYS)
+      : null;
+    const isNA = (key) => !!(naKeys && naKeys.has(key));
+    // Both naCell() (a setting hidden because it's N/A for this element)
+    // and emptyCell() (a plain, pre-existing "nothing belongs here"
+    // placeholder — e.g. chipColor's row 1, where col2 is deliberately
+    // blank for every element) share the same data-blank marker, so the
+    // pair-rendering loop below can drop a row once NEITHER cell has real
+    // content, regardless of which of the two blank kinds either one is.
+    // naCell also gets its own data-na so isNA-driven rows can be told
+    // apart from ordinary placeholders if that's ever needed later.
+    const naCell = () => { const d = document.createElement('div'); d.className = 'control-row'; d.dataset.na = '1'; d.dataset.blank = '1'; return d; };
+    const buildFeature = (key, depKeys) => isNA(key) ? naCell() : renderCustomizeFeatureRow(id, byKey[key], (depKeys || []).map((k) => byKey[k]), useCustom);
+    const buildPlain = (key) => isNA(key) ? naCell() : renderCustomizePlainRow(id, byKey[key], useCustom);
+    const buildInlineCheckbox = (key) => isNA(key) ? naCell() : renderCustomizeInlineCheckboxRow(id, byKey[key], useCustom);
+    const emptyCell = () => { const d = document.createElement('div'); d.className = 'control-row'; d.dataset.blank = '1'; return d; };
     // Bulb Size/Gap are standalone rows now (see CUSTOMIZE_ROW_LAYOUT's own
     // comment on ungrouping), so buildPlain alone no longer gates them off
     // marqueeBulbs the way a stacked dependent would — matching Global's
@@ -6335,6 +6936,19 @@
     // whole tab when it's toggled (see that function's own comment) — this
     // is what actually applies the lock at render time.
     const bulbsOn = !!MarqueeCore.getEffectiveVisualsFor(layout, visuals, id).marqueeBulbs;
+    // Click-anywhere-in-the-row flash of Enable Bulbs' own row (see
+    // flashRowClass's own comment on why the animationend cleanup
+    // matters) — same treatment as Global's wireBulbModeOffFlash/
+    // flashEnableBulbsToggle, per request, applied to every one of
+    // Customize's own bulb-dependent rows (Size/Gap/Flicker/Element
+    // Scroll). Re-checks bulbsOn fresh at click time rather than closing
+    // over the value captured at render time, since a click can't
+    // actually happen until well after this render pass finishes.
+    const wireBulbsOffFlash = (row) => {
+      row.addEventListener('click', () => {
+        if (!MarqueeCore.getEffectiveVisualsFor(layout, visuals, id).marqueeBulbs) flashRowClass(marqueeBulbsRow, 'bulbs-off-flash');
+      });
+    };
     const buildBulbSizeGapRow = (key) => {
       const row = buildPlain(key);
       if (useCustom && !bulbsOn) {
@@ -6342,8 +6956,30 @@
         const input = row.querySelector('input[type="range"]');
         if (input) input.disabled = true;
       }
+      wireBulbsOffFlash(row);
       return row;
     };
+    // Bulb Flicker/Element Scroll — same off-when-Enable-Bulbs-is-off lock
+    // Bulb Size/Gap already get via buildBulbSizeGapRow, applied to a
+    // buildFeature row instead of a buildPlain one (their own dependents
+    // — Random/Intensity, Speed/Clockwise — need locking too, not just
+    // the row's own main checkbox).
+    const buildBulbGatedFeature = (key, depKeys) => {
+      const row = buildFeature(key, depKeys);
+      if (useCustom && !bulbsOn) {
+        row.classList.add('feature-slider-locked');
+        row.querySelectorAll('input, select').forEach((el) => { el.disabled = true; });
+      }
+      wireBulbsOffFlash(row);
+      return row;
+    };
+    // Built once, ahead of CUSTOMIZE_ROW_LAYOUT, so wireBulbsOffFlash
+    // (above) and every buildBulbSizeGapRow/buildBulbGatedFeature call
+    // (below) can flash this exact node — it's a real node reference
+    // captured at construction time, not a deferred getElementById
+    // lookup, so it's safe to use even though this whole tab is still
+    // detached from the document at this point.
+    const marqueeBulbsRow = buildFeature('marqueeBulbs', []);
     // Explicit section/pair layout, hand-mirrored from the Global tab's own
     // markup instead of derived by a generic sort — per request, every
     // overridable setting needs to sit in the same card, paired with the
@@ -6354,7 +6990,7 @@
     // slot instead.
     const CUSTOMIZE_ROW_LAYOUT = [
       {
-        title: 'Layout & Canvas',
+        title: 'Stage',
         pairs: [
           // Mirrors Global's Background/Element Color-Transparency pair —
           // only Element (chipColor) is overridable, so it renders alone.
@@ -6377,7 +7013,7 @@
           [buildPlain('accent'), id === 'score' ? renderCustomizeScoreColorGradientRow() : emptyCell()],
           [buildPlain('elementHeadSize'), buildPlain('headerTextColor')],
           [buildPlain('elementTextSize'), buildPlain('textColor')],
-          [buildPlain('font'), renderCustomizeTextStyleGroupRow(id, [byKey.bold, byKey.italic, byKey.underline], useCustom)],
+          [buildPlain('font'), isNA('font') ? naCell() : renderCustomizeTextStyleGroupRow(id, [byKey.bold, byKey.italic, byKey.underline], useCustom)],
         ],
       },
       {
@@ -6395,22 +7031,14 @@
           // (Layout Scroll, not overridable) is left empty — Edge Fade
           // moved out to Layout & Canvas (see above), matching its
           // renamed "Fade Edge of Text" Global row's own section.
-          [buildFeature('marqueeBulbs', []), buildFeature('marqueeBulbFlicker', ['marqueeBulbFlickerIntensity', 'marqueeBulbFlickerRandom'])],
+          [marqueeBulbsRow, buildBulbGatedFeature('marqueeBulbFlicker', ['marqueeBulbFlickerIntensity', 'marqueeBulbFlickerRandom'])],
           [buildBulbSizeGapRow('marqueeBulbSize'), emptyCell()],
           // Exact match — Global's own Bulb Gap/Element Scroll+Clockwise+Speed row.
-          [buildBulbSizeGapRow('marqueeBulbGap'), buildFeature('marqueeBulbScroll', ['marqueeBulbSpeedElements', 'marqueeBulbScrollClockwise'])],
-          // Exact match — Global's own Text Scroll/Stars row. Hover-pairing
-          // (see wireMarqueeGroupHover's own comment) is wired right here,
-          // off these two real in-memory row references, rather than
-          // inside renderCustomizeFeatureRow — a getElementById lookup
-          // there would run before either row is attached to the document
-          // and always silently fail to find its target.
-          (() => {
-            const scrollRow = buildFeature('marqueeScroll', ['marqueeScrollSpeed']);
-            const sparkleRow = buildFeature('marqueeSparkle', ['marqueeSparkleSize']);
-            wireMarqueeGroupHover(scrollRow, sparkleRow);
-            return [scrollRow, sparkleRow];
-          })(),
+          [buildBulbSizeGapRow('marqueeBulbGap'), buildBulbGatedFeature('marqueeBulbScroll', ['marqueeBulbSpeedElements', 'marqueeBulbScrollClockwise'])],
+          // Exact match — Global's own Text Scroll/Stars row. No longer
+          // hover-paired (see wireMarqueeGroupHover's own comment) — each
+          // row highlights independently now, same as every other row.
+          [buildFeature('marqueeScroll', ['marqueeScrollSpeed']), buildFeature('marqueeSparkle', ['marqueeSparkleSize'])],
         ],
       },
     ];
@@ -6424,11 +7052,21 @@
       const rows = document.createElement('div');
       rows.className = 'settings-section-rows';
       pairs.forEach(([a, b]) => {
+        // Drop the row entirely once NEITHER cell has real content (see
+        // naCell/emptyCell's shared data-blank marker) — covers both an
+        // N/A setting paired with the plain placeholder (e.g. Marquee
+        // Edge Fade's row, N/A for Album Art, whose col2 was already a
+        // bare emptyCell()) and two N/A settings paired together. A
+        // single N/A cell paired with a REAL setting still renders,
+        // just with an empty second column, same as the pre-existing
+        // intentional single-column rows already do.
+        if (a.dataset.blank === '1' && b.dataset.blank === '1') return;
         const pair = document.createElement('div');
         pair.className = 'settings-row-pair';
         pair.append(a, b);
         rows.appendChild(pair);
       });
+      if (!rows.children.length) return;
       section.appendChild(rows);
       container.appendChild(section);
     });
@@ -6442,16 +7080,20 @@
     // comment for why this can't just be a DOM class surviving the rebuild.
     applyCollapsedSectionState(container);
   }
-  // Collapsible settings-group cards (Layout & Canvas/Color & Font/
-  // Marquee Effects), both tabs. Customize's own cards are torn down and
-  // rebuilt from scratch on nearly every interaction (renderCustomizeSettingRows
-  // above), so collapse state can't just live in the .collapsed DOM class
-  // alone — a rebuild would silently re-expand everything the user just
-  // collapsed. Keyed by title text (including its trailing ':') rather
-  // than section index, since both tabs happen to use the exact same
-  // three titles — collapsing one tab's card collapses the same-named
-  // card on the other tab too, which reads as expected (it's "the same
-  // settings group", just shown twice).
+  // Collapsible settings-group cards — used by every panel that has any
+  // (Global, Customize, Elements, Advanced), but this particular Set
+  // exists because of Global/Customize specifically: Customize's own
+  // cards are torn down and rebuilt from scratch on nearly every
+  // interaction (renderCustomizeSettingRows above), so collapse state
+  // can't just live in the .collapsed DOM class alone — a rebuild would
+  // silently re-expand everything the user just collapsed. Keyed by
+  // title text (including its trailing ':') rather than section index,
+  // since Global and Customize happen to use the exact same three titles
+  // (Stage/Color & Font/Marquee Effects) — collapsing one tab's card
+  // collapses the same-named card on the other tab too, which reads as
+  // expected (it's "the same settings group", just shown twice). Elements/
+  // Advanced don't share any titles with another tab, so for them this
+  // Set only ever has one matching section — same mechanism, simpler case.
   const collapsedSectionTitles = new Set();
   // Grows the page-bottom spacer (see its own markup comment) by exactly
   // as much as a card is about to shrink, and shrinks it back by exactly
@@ -6491,7 +7133,27 @@
   // this spreads that same height change over the CSS transition instead
   // (see .settings-section-rows' own transition rule).
   function setSectionRowsCollapsed(rows, collapsed) {
+    // Reading scrollHeight while a PREVIOUS collapse's inline max-height
+    // (e.g. '0px') is still applied can under-measure — not just clip the
+    // content, but actually shrink it: per spec, any descendant whose own
+    // `overflow` isn't `visible` gets its automatic minimum size reduced
+    // to 0 as a flex item, so a flex column child CAN genuinely flex-
+    // shrink all the way to 0 real height instead of just being visually
+    // clipped. Confirmed live: the Elements tab's own list
+    // (#elementToggles, which sets overflow-x:auto for its own horizontal
+    // scroll) got stuck permanently collapsed this way — reopening
+    // measured scrollHeight while still AT the previous 0px, read 0, and
+    // "expanded" to 0px forever. Most other sections' rows don't set
+    // `overflow` on their own content at all, so they never actually hit
+    // this, which is why it went unnoticed there. Momentarily releasing
+    // the constraint before measuring guarantees a real reading
+    // regardless of what any particular section's content does with
+    // `overflow`, not just the one card that happened to expose it.
+    const prevMaxHeight = rows.style.maxHeight;
+    rows.style.maxHeight = 'none';
     const startHeight = rows.scrollHeight;
+    rows.style.maxHeight = prevMaxHeight;
+    void rows.offsetHeight;
     rows.style.maxHeight = startHeight + 'px';
     // Forces the browser to commit the line above as a real, separate
     // style before the next one — without this the two writes coalesce
@@ -6549,7 +7211,7 @@
   // Elements/Import-Export panels' own unrelated .settings-section-title
   // cards (see the matching CSS selector's own comment).
   document.addEventListener('click', (e) => {
-    const title = e.target.closest('#globalSettingsTab .settings-section-title, #customizeSettingsTab .settings-section-title');
+    const title = e.target.closest('#globalSettingsTab .settings-section-title, #customizeSettingsTab .settings-section-title, #advancedPanel .settings-section-title, #elementsPanel .settings-section-title');
     if (!title) return;
     const section = title.closest('.settings-section');
     if (!section) return;
@@ -6580,6 +7242,29 @@
       });
     }
   });
+  // ── RELEASE-ONLY: every settings-group card (Global/Customize/Elements/
+  // Advanced) starts collapsed on first load instead of open — a closed
+  // card is what nudges someone into clicking it and discovering it's
+  // expandable at all, per request. Set this to true only when packaging
+  // an actual release, back to false for day-to-day dev/testing — leaving
+  // it on would mean re-opening every card by hand on every reload while
+  // working on this file. Only needs to seed from Global/Elements/Advanced
+  // (their .settings-section-title elements exist in the static HTML
+  // right now) — Customize's own cards share the exact same three titles
+  // as Global's (see collapsedSectionTitles' own comment above) and pick
+  // up the same collapsed state automatically the first time
+  // renderCustomizeSettingRows runs, via its own applyCollapsedSectionState
+  // call. Uses applyCollapsedSectionState (no-transition) rather than the
+  // animated setSectionRowsCollapsed — same reasoning as a fresh Customize
+  // rebuild: animating a card the user never actually saw open would just
+  // be a pointless flicker on load. ──
+  const COLLAPSE_SETTINGS_BY_DEFAULT = false;
+  if (COLLAPSE_SETTINGS_BY_DEFAULT) {
+    document.querySelectorAll('#globalSettingsTab .settings-section-title, #elementsPanel .settings-section-title, #advancedPanel .settings-section-title').forEach((title) => {
+      collapsedSectionTitles.add(title.textContent);
+    });
+    applyCollapsedSectionState(document);
+  }
   // Shared by both places custom text can be edited — the Custom Text
   // list's own field, and (redundantly, on purpose — the user asked for
   // it) the rename field in the Elements list. Updates the on-canvas
@@ -6732,7 +7417,11 @@
   function addCustomTextFromInput() {
     const input = document.getElementById('customTextInput');
     const text = input.value.trim();
-    if (!text) return;
+    if (!text) {
+      flashRowClass(input, 'input-flash-red');
+      input.focus();
+      return;
+    }
     createCustomElement(text);
     input.value = '';
     input.focus();
@@ -6845,15 +7534,30 @@
     root.style.setProperty('--font-display', `"${name}", 'Segoe UI', Arial, sans-serif`);
     setupAllTickers();
   }
+  // Shared by every attention-flash below — remove+reflow+re-add so rapid
+  // repeat clicks each get their own flash instead of a second click
+  // silently no-op'ing against an already-present class, PLUS an
+  // animationend cleanup that removes the class once the flash actually
+  // finishes. That cleanup matters here specifically: a CSS animation on
+  // an element that's inside a display:none ancestor at the time doesn't
+  // just pause, it RESTARTS FROM SCRATCH the next time that ancestor
+  // becomes visible again. Without removing the class afterward, a row
+  // flashed once, then hidden by switching Global/Customize tabs (or
+  // Enable Bulbs' own row losing then regaining visibility), would
+  // silently replay the whole flash the moment its tab was reopened —
+  // reported live as "switching tabs re-triggers the red flash" on
+  // whichever row/toggle had ever actually been flashed before.
+  function flashRowClass(row, className) {
+    if (!row) return;
+    row.classList.remove(className);
+    void row.offsetWidth;
+    row.classList.add(className);
+    row.addEventListener('animationend', () => row.classList.remove(className), { once: true });
+  }
   // Flashes the Lock Layout pill — the visible answer to "why didn't my
-  // click do anything" when the stage is locked. Remove+reflow+re-add so
-  // rapid repeat clicks each get their own flash instead of the second
-  // click silently no-op'ing against an already-present class.
+  // click do anything" when the stage is locked.
   function flashLockToggle() {
-    const toggle = editModeInput.closest('.edit-toggle');
-    toggle.classList.remove('lock-flash');
-    void toggle.offsetWidth;
-    toggle.classList.add('lock-flash');
+    flashRowClass(editModeInput.closest('.edit-toggle'), 'lock-flash');
   }
   // Same idea, for Marquee Text Scroll — the visible answer to "why didn't
   // my click do anything" when clicking a disabled Marquee Stars row while
@@ -6866,27 +7570,33 @@
     const control = document.getElementById(scrollControlId);
     // .feature-row covers the Customize tab's own dynamically-built row;
     // .control-row--slider covers the Global tab's (converted from a
-    // .feature-row — see this row's own markup comment).
-    const row = control && control.closest('.feature-row, .control-row--slider');
-    if (!row) return;
-    row.classList.remove('lock-flash');
-    void row.offsetWidth;
-    row.classList.add('lock-flash');
+    // .feature-row — see this row's own markup comment). Red flash (see
+    // flashEnableBulbsToggle's own comment on .bulbs-off-flash) per
+    // request, not the themed var(--vs-accent) .lock-flash uses.
+    flashRowClass(control && control.closest('.feature-row, .control-row--slider'), 'bulbs-off-flash');
   }
-  // The plain cursor-hover highlight (.group-hover, see its own CSS
-  // comment) — just the everyday "you're pointed at this row" background/
-  // border tint every .control-row gets on real :hover, applied to BOTH
-  // rows whenever the cursor is over EITHER one, so hovering either half
-  // of the pair highlights the whole pair. Wired on both rows both ways
-  // (each row's own mouseenter/mouseleave toggles the class on both) so
-  // it works regardless of which one the cursor actually entered.
-  function wireMarqueeGroupHover(rowA, rowB) {
-    if (!rowA || !rowB) return;
-    const enter = () => { rowA.classList.add('group-hover'); rowB.classList.add('group-hover'); };
-    const leave = () => { rowA.classList.remove('group-hover'); rowB.classList.remove('group-hover'); };
-    [rowA, rowB].forEach((row) => {
-      row.addEventListener('mouseenter', enter);
-      row.addEventListener('mouseleave', leave);
+  // Same idea, for Enable Bulbs — the visible answer to "why didn't my
+  // click do anything" when clicking Bulb Size/Gap/Flicker/Stage Scroll/
+  // Element Scroll while Enable Bulbs is set to Off (see
+  // wireBulbModeOffFlash below, which wires every one of those rows to
+  // call this). Enable Bulbs' own row is .control-row--vcenter, not
+  // .control-row--slider like every other feature-row here, so this
+  // can't just reuse flashMarqueeScrollToggle's selector.
+  function flashEnableBulbsToggle() {
+    flashRowClass(document.getElementById('marqueeBulbMode').closest('.control-row'), 'bulbs-off-flash');
+  }
+  // Wires one bulb-dependent row's click to flash Enable Bulbs specifically
+  // when it's set to Off — NOT for the "wrong mode" case (e.g. Stage
+  // Scroll disabled because mode is "Elements Only"), which already reads
+  // as disabled-but-not-broken via the row's own dimming; Off is the one
+  // state where every one of these rows is simultaneously locked out, so
+  // that's the one worth pointing at explicitly.
+  function wireBulbModeOffFlash(anchorId) {
+    const anchor = document.getElementById(anchorId);
+    const row = anchor && anchor.closest('.control-row--slider');
+    if (!row) return;
+    row.addEventListener('click', () => {
+      if (document.getElementById('marqueeBulbMode').value === 'off') flashEnableBulbsToggle();
     });
   }
   // Element Outlines only makes sense while the layout is unlocked (there's
@@ -6933,7 +7643,7 @@
   editModeInput.addEventListener('change', (e) => {
     editMode = !e.target.checked;
     stage.classList.toggle('editing', editMode);
-    document.getElementById('lockLayoutLabel').textContent = e.target.checked ? 'Unlock Layout:' : 'Lock Layout:';
+    document.getElementById('lockLayoutLabel').textContent = e.target.checked ? 'Unlock Stage:' : 'Lock Stage:';
     document.getElementById('lockIcon').classList.toggle('unlocked', !e.target.checked);
     updateOutlinesLockState(e.target.checked);
   });
@@ -6949,22 +7659,23 @@
   document.getElementById('marqueeSparkle').closest('.control-row--slider').addEventListener('click', () => {
     if (document.getElementById('marqueeSparkle').disabled) flashMarqueeScrollToggle('marqueeScroll');
   });
-  wireMarqueeGroupHover(
-    document.getElementById('marqueeScroll').closest('.control-row--slider'),
-    document.getElementById('marqueeSparkle').closest('.control-row--slider')
-  );
-  // wireFeatureRowSliderFlash (checkbox+dependent-slider .feature-row
-  // gating) has no remaining Global-tab callers — Bulb Mode, Bulb
-  // Flicker, Bulb Scroll (Layout/Elements), Confetti, and now Text
-  // Scroll/Stars have all converted away from the .feature-row shape to
-  // .control-row--slider, each with its own dedicated wire*Lock function
-  // instead (wireMarqueeBulbSizeGapLock, wireMarqueeBulbFlickerLock,
+  // wireMarqueeGroupHover (paired mouseover highlight across both rows)
+  // removed per request — Text Scroll and Stars no longer share a hover
+  // highlight, each row highlights on its own now like every other row.
+  // The old generic checkbox/select-gated .feature-row lock helpers
+  // (wireFeatureRowSliderFlash/wireFeatureRowSliderLockFromSelect) were
+  // removed entirely (2026-08, pre-release cleanup) once every last
+  // Global-tab caller had converted away from the .feature-row shape —
+  // Bulb Mode, Bulb Flicker, Bulb Scroll (Layout/Elements), Confetti, and
+  // Text Scroll/Stars each now have their own dedicated wire*Lock
+  // function instead (wireMarqueeBulbSizeGapLock, wireMarqueeBulbFlickerLock,
   // wireMarqueeBulbScrollLock, wireConfettiLock, wireMarqueeScrollGroupLock
-  // below). Left defined (not deleted) since the Customize tab's own
-  // dynamically-built rows (renderCustomizeFeatureRow) still use the
-  // exact same mechanism.
+  // below). The Customize tab's own dynamically-built rows
+  // (renderCustomizeFeatureRow) never actually called either removed
+  // function — it always had its own separate, hand-rolled version of the
+  // same disabled/greyed-out pattern.
   // Bulb Size/Gap — same disabled/greyed-out-while-Bulb-Mode-is-"off"
-  // gating wireFeatureRowSliderLockFromSelect used to give them as a
+  // gating the old select-based helper used to give them as a
   // feature-row's dependents, just scoped to their own now-separate rows
   // (see the markup's own comment for why they're separate) instead of a
   // shared .feature-row-sliders stack.
@@ -6987,21 +7698,32 @@
     featureRowLockSyncs.push(sync);
   })();
   // Bulb Flicker Intensity — same disabled/greyed-out-until-Flicker-is-on
-  // gating wireFeatureRowSliderFlash used to give it as a feature-row's
+  // gating the old checkbox-based helper used to give it as a feature-row's
   // dependent, just scoped to its own now-combined row (see the markup's
-  // own comment) instead of a shared .feature-row-sliders stack. Same
-  // pattern as wireConfettiLock below.
+  // own comment) instead of a shared .feature-row-sliders stack. Also now
+  // gated by Enable Bulbs mode (matches wireMarqueeBulbSizeGapLock/
+  // wireMarqueeBulbScrollLock's own dual-condition pattern) — per
+  // request, tying Bulb Flicker (checkbox, Random, and Intensity) to
+  // Enable Bulbs the same way Size/Gap/Stage Scroll/Element Scroll
+  // already were: greyed out whenever mode is Off, regardless of the
+  // Flicker checkbox's own state.
   (function wireMarqueeBulbFlickerLock() {
+    const modeSelect = document.getElementById('marqueeBulbMode');
     const checkbox = document.getElementById('marqueeBulbFlicker');
+    const randomCheckbox = document.getElementById('marqueeBulbFlickerRandom');
     const slider = document.getElementById('marqueeBulbFlickerIntensity');
     const row = slider && slider.closest('.control-row--slider');
-    if (!checkbox || !slider || !row) return;
+    if (!modeSelect || !checkbox || !randomCheckbox || !slider || !row) return;
     function sync() {
-      const enabled = checkbox.checked;
+      const modeOk = modeSelect.value !== 'off';
+      const enabled = modeOk && checkbox.checked;
       row.classList.toggle('feature-slider-locked', !enabled);
       slider.disabled = !enabled;
+      checkbox.disabled = !modeOk;
+      randomCheckbox.disabled = !modeOk;
     }
     checkbox.addEventListener('change', sync);
+    modeSelect.addEventListener('change', sync);
     sync();
     featureRowLockSyncs.push(sync);
   })();
@@ -7040,11 +7762,17 @@
   }
   wireMarqueeBulbScrollLock('marqueeBulbScrollLayout', 'marqueeBulbSpeedLayout', 'marqueeBulbScrollClockwiseLayout', ['all', 'layout']);
   wireMarqueeBulbScrollLock('marqueeBulbScroll', 'marqueeBulbSpeedElements', 'marqueeBulbScrollClockwise', ['all', 'elements']);
+  // Click-to-flash-Enable-Bulbs for every row that's locked out while it's
+  // Off — see wireBulbModeOffFlash/flashEnableBulbsToggle's own comments.
+  wireBulbModeOffFlash('marqueeBulbSize');
+  wireBulbModeOffFlash('marqueeBulbGap');
+  wireBulbModeOffFlash('marqueeBulbFlickerIntensity');
+  wireBulbModeOffFlash('marqueeBulbSpeedLayout');
+  wireBulbModeOffFlash('marqueeBulbSpeedElements');
   // Confetti Amount/Test Confetti — same disabled/greyed-out-until-its-
-  // checkbox-is-on gating every other dependent slider gets (see
-  // wireFeatureRowSliderFlash's own comment), just scoped to this row's
-  // own shape (Element Header Text Size's, not a feature-row) instead of
-  // a shared .feature-row-sliders stack.
+  // checkbox-is-on gating every other dependent slider gets, just scoped
+  // to this row's own shape (Element Header Text Size's, not a
+  // feature-row) instead of a shared .feature-row-sliders stack.
   (function wireConfettiLock() {
     const checkbox = document.getElementById('confettiEnabled');
     const slider = document.getElementById('confettiVolume');
@@ -7064,8 +7792,8 @@
   // Confetti Duration/Trigger — same lock, but these two live in the
   // OTHER half-column (see .control-row--confetti-timing-group), a
   // completely separate .control-row from confettiEnabled's own, so
-  // neither wireFeatureRowSliderFlash nor wireConfettiLock above ever
-  // reaches them. Own small sync, same pattern.
+  // wireConfettiLock above never reaches them. Own small sync, same
+  // pattern.
   (function wireConfettiTimingLock() {
     const checkbox = document.getElementById('confettiEnabled');
     const durationInput = document.getElementById('confettiDuration');
@@ -7207,6 +7935,7 @@
     // the selected preset's default visuals snapshot instead of pasted
     // JSON.
     applyImportedVisuals(preset.default.visuals);
+    restoreStageOverride(preset.default);
     syncAllNames();
     // Re-hides any element that's a Roll member (resolveRollGroups, via
     // setupAllTickers) — without this, a member restored with visible:
@@ -7515,13 +8244,7 @@
   // real score update path in render.html) picks it up on its own.
   const scoreColorGradientCheckbox = document.getElementById('scoreColorGradient');
   scoreColorGradientCheckbox.addEventListener('input', (e) => {
-    visuals.marqueeScoreColorGradient = e.target.checked;
-    // Keep the Customize tab's own redundant copy of this checkbox (only
-    // present while Score is the selected element — see
-    // renderCustomizeScoreColorGradientRow) in sync, if it's currently in
-    // the DOM at all.
-    const customizeCheckbox = document.getElementById('customize-scoreColorGradient');
-    if (customizeCheckbox) customizeCheckbox.checked = e.target.checked;
+    setScoreColorGradient(e.target.checked);
   });
   // No preset file seeds marqueeScoreColorGradient (it's never been part
   // of any defaultVisuals — see [[marquee-score-gradient-export-gap]] in
@@ -7785,6 +8508,7 @@
     globalSettingsTabEl.style.display = 'none';
     settingsTabsNote.textContent = 'Customize settings enabled per element.';
     settingsTabsNote.classList.add('is-inert');
+    settingsTabsNote.classList.remove('has-overrides');
     syncCustomizeEnableToggle();
     renderCustomizeSettingRows();
   });
@@ -7881,7 +8605,8 @@
     // though collapse/expand isn't a disabled setting at all.
     if (e.target.closest('.settings-section-title')) return;
     const id = document.getElementById('customizeElementSelect').value;
-    if (id && !(layout[id] && layout[id].useCustomStyles)) flashCustomizeEnableBand();
+    const useCustom = id === STAGE_ID ? stageOverride.useCustomStyles : !!(layout[id] && layout[id].useCustomStyles);
+    if (id && !useCustom) flashCustomizeEnableBand();
   });
   document.getElementById('customizeResetBtn').addEventListener('click', () => {
     const id = document.getElementById('customizeElementSelect').value;
@@ -7919,7 +8644,7 @@
     const note = document.getElementById('exportNote');
     try {
       await navigator.clipboard.writeText(json);
-      note.textContent = 'Layout settings copied to clipboard. Friends can paste in their Layout Settings to copy your Layout.';
+      note.textContent = 'Stage settings copied to clipboard. Friends can paste in their Stage Settings to copy your Stage.';
     } catch (err) {
       // Clipboard API can be blocked (permissions, non-secure context,
       // etc.) — no visible text box to fall back to anymore, so point at
@@ -7970,9 +8695,9 @@
     try {
       const data = JSON.parse(raw);
       importState(data);
-      note.textContent = 'Layout updated';
+      note.textContent = 'Stage updated';
     } catch (err) {
-      note.textContent = 'Layout Settings Import Failed';
+      note.textContent = 'Stage Settings Import Failed';
     }
   });
   let tickerResizeTimer;
@@ -8122,12 +8847,470 @@
   tool's synchronous boot sequence to avoid.--><script>(function () {
   'use strict';
   const LAYOUT_URL = '/api/plugins/marquee/layout';
+  // ── Save As / Delete Preset — user-created presets, and a record of
+  // which built-in presets the user has removed from their own dropdown.
+  // Persisted server-side (routes.py's preset_prefs_file) rather than
+  // anywhere under assets/, specifically so both survive a plugin update
+  // overwriting assets/presets/. presetPrefs is the one in-memory copy —
+  // every mutation (Save As, Delete) edits it directly then PUTs the whole
+  // thing back, same whole-object read/write model LAYOUT_URL already
+  // uses. ──
+  const PRESET_PREFS_URL = '/api/plugins/marquee/preset-prefs';
+  let presetPrefs = { custom: {}, hiddenBuiltins: [] };
+  function slugifyPresetName(name) {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || ('preset-' + Date.now());
+  }
+  function customPresetKey(slug) { return 'custom:' + slug; }
+  // Keeps #presetSelect's <option>s in alphabetical-by-label order —
+  // built-in and custom mixed together, not grouped — after any change to
+  // the list (Save As, Delete, Restore Presets, boot). appendChild on an
+  // already-attached <option> MOVES it rather than duplicating it, so
+  // re-appending every option in sorted order is enough; no need to
+  // remove/rebuild anything. Restores whatever was selected afterward,
+  // since re-appending doesn't itself change .value but a naive rebuild
+  // easily could.
+  function sortPresetOptions() {
+    const selectedValue = presetSelect.value;
+    Array.prototype.slice.call(presetSelect.options)
+      .sort((a, b) => a.textContent.localeCompare(b.textContent, undefined, { sensitivity: 'base' }))
+      .forEach((opt) => presetSelect.appendChild(opt));
+    presetSelect.value = selectedValue;
+  }
+  // Re-saving under a name that slugifies to an already-existing custom
+  // preset overwrites that entry in place (deterministic slug, no
+  // uniqueness suffix) — lets "Save As" double as an intentional update
+  // when the user reuses the same name on purpose.
+  function addOrUpdateCustomPresetOption(slug, name) {
+    const key = customPresetKey(slug);
+    let opt = Array.prototype.find.call(presetSelect.options, (o) => o.value === key);
+    if (!opt) {
+      opt = document.createElement('option');
+      opt.value = key;
+      presetSelect.appendChild(opt);
+    }
+    opt.textContent = name;
+    sortPresetOptions();
+  }
+  function registerCustomPreset(slug, data) {
+    const snapshot = {
+      layout: JSON.parse(JSON.stringify((data && data.elements) || {})),
+      visuals: JSON.parse(JSON.stringify((data && data.visuals) || {})),
+      order: data && Array.isArray(data.order) ? [...data.order] : Object.keys((data && data.elements) || {}),
+      stageOverride: JSON.parse(JSON.stringify((data && data.stageOverride) || {})),
+    };
+    PRESETS[customPresetKey(slug)] = { default: snapshot, current: clonePresetSnapshot(snapshot) };
+    addOrUpdateCustomPresetOption(slug, (data && data.name) || slug);
+  }
+  // Built-ins are only ever hidden, never actually deleted — their
+  // defaults still live in assets/presets/*.js untouched. This just drops
+  // them from PRESETS (so nothing else in the tool can select/reset to
+  // them) and removes the <option>.
+  function hideBuiltinPreset(name) {
+    delete PRESETS[name];
+    const opt = Array.prototype.find.call(presetSelect.options, (o) => o.value === name);
+    if (opt) opt.remove();
+  }
+  function applyPresetPrefs(prefs) {
+    presetPrefs = prefs && typeof prefs === 'object' ? prefs : { custom: {}, hiddenBuiltins: [] };
+    if (!presetPrefs.custom || typeof presetPrefs.custom !== 'object') presetPrefs.custom = {};
+    if (!Array.isArray(presetPrefs.hiddenBuiltins)) presetPrefs.hiddenBuiltins = [];
+    // Self-heal: drop any hiddenBuiltins entry that isn't a real built-in
+    // in THIS version of the code — e.g. one a later update renamed or
+    // removed. BUILTIN_PRESET_REGISTRY (built from the main script's own
+    // #presetSelect <option>s, captured fresh every boot) always reflects
+    // the CURRENT code's actual built-ins, regardless of what name was
+    // saved under an older version. Without this, a rename could leave a
+    // permanently-dead entry sitting in the saved file forever — harmless
+    // on its own (hideBuiltinPreset on a name that doesn't exist is a
+    // no-op), but pointless clutter that a fresh boot can just quietly
+    // fix. Persisted back immediately so the file itself gets updated,
+    // not just this session's in-memory copy — matches Restore Presets'
+    // own behavior of unconditionally clearing hiddenBuiltins on click,
+    // just automatic instead of requiring the user to press the button.
+    const validHidden = presetPrefs.hiddenBuiltins.filter((name) => BUILTIN_PRESET_REGISTRY[name]);
+    const prunedStaleHidden = validHidden.length !== presetPrefs.hiddenBuiltins.length;
+    presetPrefs.hiddenBuiltins = validHidden;
+    presetPrefs.hiddenBuiltins.forEach(hideBuiltinPreset);
+    Object.keys(presetPrefs.custom).forEach((slug) => registerCustomPreset(slug, presetPrefs.custom[slug]));
+    // Covers the case where nothing above added a custom option (so
+    // addOrUpdateCustomPresetOption's own sort never ran) but hiding did
+    // remove some — the list should still come out alphabetized either
+    // way, not just when a custom preset happens to exist.
+    sortPresetOptions();
+    if (prunedStaleHidden) savePresetPrefs().catch((e) => console.warn('Marquee editor: failed to save preset preferences after pruning a stale entry', e));
+  }
+  function savePresetPrefs() {
+    return fetch(PRESET_PREFS_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(presetPrefs) });
+  }
+  // ── Save As / Delete Preset button wiring. Declared here (before the
+  // boot fetch chain below, which calls updateDeletePresetBtnState() as
+  // soon as the preset list is populated) rather than further down near
+  // the tool's other presetSelect 'change' listeners — deletePresetBtn is
+  // a `const`, so calling updateDeletePresetBtnState() from the boot chain
+  // before this ran would hit the temporal dead zone and throw. saveCurrentPresetState/
+  // loadPresetState/updateResetBtnAvailability/PRESETS/elementOrder/layout/
+  // visuals/stageOverride are the tool's own globals from the main script
+  // above this one. ──
+  const savePresetBtn = document.getElementById('savePresetBtn');
+  const deletePresetBtn = document.getElementById('deletePresetBtn');
+  // At least one preset has to remain selectable — the only real guard
+  // needed now that built-ins are deletable too, not just custom ones.
+  function updateDeletePresetBtnState() {
+    if (!deletePresetBtn) return;
+    deletePresetBtn.disabled = presetSelect.options.length <= 1;
+    deletePresetBtn.title = deletePresetBtn.disabled ? 'At least one preset must remain' : '';
+  }
+  presetSelect.addEventListener('change', updateDeletePresetBtnState);
+  if (savePresetBtn) {
+    savePresetBtn.addEventListener('click', () => {
+      const name = window.prompt('Save the current stage as a new preset. Name it:', '');
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const slug = slugifyPresetName(trimmed);
+      // Reads the LIVE canvas state directly (not PRESETS[...].current) so
+      // Save As captures exactly what's on screen right now, same fields
+      // saveCurrentPresetState snapshots into a preset's `current` slot.
+      const snapshot = {
+        name: trimmed,
+        order: [...elementOrder],
+        elements: JSON.parse(JSON.stringify(layout)),
+        visuals: JSON.parse(JSON.stringify(visuals)),
+        stageOverride: JSON.parse(JSON.stringify(stageOverride)),
+      };
+      presetPrefs.custom[slug] = snapshot;
+      registerCustomPreset(slug, snapshot);
+      presetSelect.value = customPresetKey(slug);
+      lastSelectedPreset = presetSelect.value;
+      updateResetBtnAvailability();
+      updateDeletePresetBtnState();
+      savePresetPrefs().then((r) => {
+        if (!r.ok) throw new Error('status ' + r.status);
+        showBadge('Preset saved', '#8fd4a0');
+      }).catch((e) => {
+        console.warn('Marquee editor: failed to save preset', e);
+        showBadge('Save failed', '#e0453c');
+      });
+      saveLayoutToBackend();
+    });
+  }
+  if (deletePresetBtn) {
+    deletePresetBtn.addEventListener('click', () => {
+      if (presetSelect.options.length <= 1) return;
+      const key = presetSelect.value;
+      const opt = presetSelect.options[presetSelect.selectedIndex];
+      const label = opt ? opt.textContent : key;
+      const isCustom = key.indexOf('custom:') === 0;
+      const confirmMsg = isCustom
+        ? 'Delete the "' + label + '" preset? This permanently deletes its saved layout — this cannot be undone.'
+        : 'Remove "' + label + '" from your preset list? It’s a built-in preset, so nothing is actually deleted — it just won’t show up in this dropdown anymore.';
+      if (!window.confirm(confirmMsg)) return;
+      if (isCustom) {
+        delete presetPrefs.custom[key.slice('custom:'.length)];
+      } else if (presetPrefs.hiddenBuiltins.indexOf(key) === -1) {
+        presetPrefs.hiddenBuiltins.push(key);
+      }
+      delete PRESETS[key];
+      if (opt) opt.remove();
+      savePresetPrefs().catch((e) => console.warn('Marquee editor: failed to save preset preferences', e));
+      // Land on whatever's now first in the list, same flow as picking a
+      // different preset by hand.
+      presetSelect.value = presetSelect.options[0].value;
+      saveCurrentPresetState(lastSelectedPreset);
+      loadPresetState(presetSelect.value);
+      lastSelectedPreset = presetSelect.value;
+      updateResetBtnAvailability();
+      updateDeletePresetBtnState();
+      saveLayoutToBackend();
+    });
+  }
+  // ── Advanced tab: Factory Reset / Restore Presets. Rebuilds every
+  // hidden built-in from BUILTIN_PRESET_REGISTRY (declared in the main
+  // script above, captured once at boot before Delete Preset could ever
+  // remove one) and also snaps every REMAINING built-in's `current` back
+  // to its original default — undoes both "hidden" and "edited/drifted"
+  // in one action. This is the designated recovery path if a future code
+  // change ever alters a built-in preset in a way that leaves someone's
+  // saved state broken/stale for it: pressing this unconditionally clears
+  // hiddenBuiltins entirely (so a renamed/removed built-in's now-dead name
+  // is dropped, same self-heal applyPresetPrefs already does automatically
+  // on every boot — see its own comment) and re-derives every built-in's
+  // `current` fresh from THIS version of the code's own default, then
+  // saves that back to preset_prefs_file — so it doesn't just fix the
+  // live session, it fixes the persisted file too. Never touches
+  // presetPrefs.custom — user-saved presets
+  // have no factory default to reset to, so Factory Reset intentionally
+  // leaves them alone. ──
+  const restorePresetsBtn = document.getElementById('restorePresetsBtn');
+  if (restorePresetsBtn) {
+    restorePresetsBtn.addEventListener('click', () => {
+      if (!window.confirm('Reset every built-in preset back to its original defaults, and restore any built-in presets you\'ve removed from the list? Your own saved presets are not affected.')) return;
+      presetPrefs.hiddenBuiltins.forEach((name) => {
+        const entry = BUILTIN_PRESET_REGISTRY[name];
+        if (!entry) return;
+        PRESETS[name] = { default: clonePresetSnapshot(entry.default), current: clonePresetSnapshot(entry.default) };
+        if (!Array.prototype.some.call(presetSelect.options, (o) => o.value === name)) {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = entry.label;
+          presetSelect.appendChild(opt);
+        }
+      });
+      presetPrefs.hiddenBuiltins = [];
+      Object.keys(BUILTIN_PRESET_REGISTRY).forEach((key) => {
+        if (PRESETS[key]) PRESETS[key].current = clonePresetSnapshot(BUILTIN_PRESET_REGISTRY[key].default);
+      });
+      sortPresetOptions();
+      updateDeletePresetBtnState();
+      // If the canvas is currently showing a built-in, reload it so the
+      // just-reset `current` is reflected immediately rather than only
+      // taking effect the next time this preset is switched to.
+      if (presetSelect.value.indexOf('custom:') !== 0 && PRESETS[presetSelect.value]) {
+        loadPresetState(presetSelect.value);
+        updateResetBtnAvailability();
+      }
+      savePresetPrefs().catch((e) => console.warn('Marquee editor: failed to save preset preferences', e));
+      saveLayoutToBackend();
+      showBadge('Presets restored', '#8fd4a0');
+    });
+  }
   // ── OBS URL note (the .obs-note element itself is the standalone tool's
   // own markup, just re-worded for the plugin — this fills in the actual
   // live URL, same value/format as the OBS Browser Source URL box in this
   // plugin's Settings panel) ──
   const obsUrlCode = document.getElementById('marquee-editor-obs-url');
   if (obsUrlCode) obsUrlCode.textContent = location.origin + '/api/plugins/marquee/render';
+  // ── Advanced tab: Network URL (LAN IP, for a second PC's OBS to reach
+  // this one) — same URL format/path as the toolbar's OBS URL above, just
+  // with the server's LAN IP swapped in for location.origin's host, since
+  // "localhost"/127.0.0.1 only resolves on this same PC. IP comes from a
+  // fresh /network-info fetch each load rather than location.hostname,
+  // since this editor is itself usually opened as localhost even when the
+  // real use case (a second PC's OBS) needs the LAN-reachable address. ──
+  const networkUrlCode = document.getElementById('networkUrlValue');
+  const networkUrlNote = document.getElementById('networkUrlNote');
+  const networkUrlCopyBtn = document.getElementById('networkUrlCopyBtn');
+  if (networkUrlCode) {
+    fetch('/api/plugins/marquee/network-info')
+      .then((r) => r.json())
+      .then((data) => {
+        const port = location.port ? ':' + location.port : '';
+        networkUrlCode.textContent = location.protocol + '//' + data.ip + port + '/api/plugins/marquee/render';
+      })
+      .catch(() => { networkUrlCode.textContent = 'Could not detect — open this page from the FeedBack PC to try again.'; });
+  }
+  if (networkUrlCopyBtn) {
+    networkUrlCopyBtn.addEventListener('click', () => {
+      const text = networkUrlCode ? networkUrlCode.textContent : '';
+      navigator.clipboard.writeText(text).then(() => {
+        if (networkUrlNote) networkUrlNote.textContent = 'Copied!';
+      }).catch(() => {
+        if (networkUrlNote) networkUrlNote.textContent = 'Copy failed — select and copy the URL manually.';
+      });
+    });
+  }
+  // ── Advanced tab: Marquee's own network-access toggle (separate from
+  // FeedBack's app-wide Network Sharing — see routes.py's network_access
+  // gate for why both are required). Loads the persisted on/off state on
+  // open, and POSTs a change immediately on click, same as every other
+  // settings checkbox in this editor auto-saving as you go. ──
+  const networkAccessToggleBtn = document.getElementById('networkAccessToggleBtn');
+  const networkAccessGateNote = document.getElementById('networkAccessGateNote');
+  let networkAccessEnabled = false; // mirrors the persisted server-side value; source of truth for which way a click toggles
+  // Declared up here (not down by its own click-handler block below) since
+  // refreshNetworkAccessGate references it and gets called immediately,
+  // before this script reaches that later block — a `const` declared down
+  // there wouldn't exist yet at that first call (temporal dead zone),
+  // silently swallowed by that function's own trailing .catch(()=>{}).
+  const enableFeedbackLanBtn = document.getElementById('enableFeedbackLanBtn');
+  const enableFeedbackLanNote = document.getElementById('enableFeedbackLanNote');
+  // Greys Marquee's own toggle out until FeedBack's OWN Network Sharing is
+  // on too — turning ours on is pointless (and easy to forget about
+  // afterward) while FeedBack's is off, since routes.py's gate needs BOTH.
+  // Reads window.parent.feedBackDesktop.network.getLanAccess() — the same
+  // Electron IPC bridge (preload.ts) plugin-manager/screen.js's own
+  // pm-lan-toggle reads/writes — one level up since this editor is always
+  // inside screen.html's iframe. Read-only here: this never calls
+  // setLanAccess, only mirrors FeedBack's own state to decide whether OUR
+  // checkbox should be interactive. Fails OPEN (leaves the checkbox alone)
+  // if the bridge isn't there at all — e.g. a non-desktop build, or this
+  // page opened standalone outside FeedBack — rather than permanently
+  // locking the checkbox over something we can't actually confirm either
+  // way.
+  function refreshNetworkAccessGate() {
+    const bridge = window.parent && window.parent.feedBackDesktop && window.parent.feedBackDesktop.network;
+    if (!bridge || typeof bridge.getLanAccess !== 'function') return;
+    bridge.getLanAccess().then((res) => {
+      const feedbackLanOn = !!(res && res.enabled);
+      // If FeedBack's own sharing just went off while Marquee's was still
+      // on, force Marquee's off too (both the persisted server-side value
+      // and this button) rather than just greying the button out over a
+      // stale "Disable"/red state.
+      //
+      // networkAccessEnabled is ONLY ever flipped to false once this POST
+      // actually SUCCEEDS — never optimistically beforehand. Reported
+      // live: flipping FeedBack's own toggle triggers FeedBack to restart
+      // its ENTIRE Python server to rebind the socket (same restart
+      // Plugin Manager's own "Restarting server to apply…" text refers
+      // to) — this POST can land right in the middle of that restart and
+      // get lost/refused, silently swallowed by a bare .catch. With the
+      // old optimistic version, the button would show "off" instantly
+      // regardless of whether the write actually landed, while the
+      // on-disk persisted value (and therefore real access) stayed
+      // exactly as it was — the button lied. Now: on failure,
+      // networkAccessEnabled stays true, so this same block just retries
+      // on the NEXT poll tick (3s later) — and keeps retrying — until a
+      // POST actually lands after FeedBack's restart finishes, at which
+      // point the button only THEN flips, honestly, to match reality.
+      if (!feedbackLanOn && networkAccessEnabled) {
+        fetch('/api/plugins/marquee/network-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false }),
+        }).then((r) => {
+          if (r.ok) networkAccessEnabled = false;
+        }).catch(() => {});
+      }
+      if (networkAccessToggleBtn) {
+        networkAccessToggleBtn.disabled = !feedbackLanOn;
+        networkAccessToggleBtn.textContent = networkAccessEnabled ? 'Disable' : 'Enable';
+        networkAccessToggleBtn.classList.toggle('btn-state-enable', !networkAccessEnabled);
+        networkAccessToggleBtn.classList.toggle('btn-state-disable', networkAccessEnabled);
+      }
+      if (networkAccessGateNote) {
+        networkAccessGateNote.textContent = feedbackLanOn
+          ? ''
+          : 'Turn on FeedBack\'s own Network Sharing (step 1) before this can be enabled.';
+      }
+      // Step 1's own button — a real toggle, not a one-way action: green
+      // "Enable" while off (click turns it on), red "Disable" once
+      // confirmed on (click turns it back off) — so turning network
+      // sharing back off never requires leaving Marquee for Plugin
+      // Manager either.
+      if (enableFeedbackLanBtn) {
+        enableFeedbackLanBtn.disabled = false;
+        enableFeedbackLanBtn.textContent = feedbackLanOn ? 'Disable' : 'Enable';
+        enableFeedbackLanBtn.classList.toggle('btn-state-enable', !feedbackLanOn);
+        enableFeedbackLanBtn.classList.toggle('btn-state-disable', feedbackLanOn);
+      }
+    }).catch(() => {});
+  }
+  refreshNetworkAccessGate();
+  // Re-check on return — the whole point of the Open Plugin Manager button
+  // below is the user leaving to flip FeedBack's toggle and coming back, so
+  // a stale grey-out would defeat it. Originally just a visibilitychange
+  // listener (covers switching FeedBack screens away and back, since this
+  // iframe stays alive, just hidden — see screen.html's own reload-watcher
+  // comment), but reported live as still getting stuck grey until a manual
+  // refresh/app restart — visibilitychange on a nested iframe isn't
+  // guaranteed to fire on every host-app screen-switch implementation, and
+  // enabling Network Sharing also restarts FeedBack's own server in the
+  // background (see plugin-manager/screen.js's "Restarting server to
+  // apply…"), which can race a one-shot check right at the moment it'd
+  // matter most. A plain poll sidesteps both: it doesn't depend on any
+  // particular event firing, just eventually notices the real state
+  // within a few seconds regardless of how/when it changed. Cheap enough
+  // to just always run (a local Electron IPC call, no network involved) —
+  // no need to gate it on tab visibility.
+  setInterval(refreshNetworkAccessGate, 3000);
+  if (networkAccessToggleBtn) {
+    fetch('/api/plugins/marquee/network-access')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('bad status'))))
+      .then((data) => {
+        networkAccessEnabled = !!data.enabled;
+        networkAccessToggleBtn.textContent = networkAccessEnabled ? 'Disable' : 'Enable';
+        networkAccessToggleBtn.classList.toggle('btn-state-enable', !networkAccessEnabled);
+        networkAccessToggleBtn.classList.toggle('btn-state-disable', networkAccessEnabled);
+      })
+      .catch(() => {});
+    networkAccessToggleBtn.addEventListener('click', () => {
+      const next = !networkAccessEnabled;
+      // Same r.ok check as refreshNetworkAccessGate's poll path (see its
+      // own comment) — fetch() only REJECTS on a network-level failure,
+      // an HTTP error status still resolves and would otherwise let this
+      // silently mark the toggle as succeeded even when the server
+      // refused/lost it (e.g. mid FeedBack-server-restart). Missing here
+      // was a real gap: the poll path already guarded against this same
+      // failure mode, this direct click handler hadn't been aligned to
+      // match it.
+      fetch('/api/plugins/marquee/network-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      }).then((r) => {
+        if (!r.ok) return;
+        networkAccessEnabled = next;
+        networkAccessToggleBtn.textContent = networkAccessEnabled ? 'Disable' : 'Enable';
+        networkAccessToggleBtn.classList.toggle('btn-state-enable', !networkAccessEnabled);
+        networkAccessToggleBtn.classList.toggle('btn-state-disable', networkAccessEnabled);
+      }).catch(() => {});
+    });
+  }
+  // ── Advanced tab: flip FeedBack's own Network Sharing on directly,
+  // instead of sending the user over to Plugin Manager to do it — reported
+  // live that FeedBack has no direct path back to Marquee from there, so a
+  // simple "go enable it" link left the user stuck navigating back through
+  // the settings menu every time. Calls the exact same Electron IPC bridge
+  // (preload.ts's network.setLanAccess, one level up on window.parent for
+  // the same same-origin-iframe reason as getLanAccess above) Plugin
+  // Manager's own pm-lan-toggle uses — this doesn't reimplement anything,
+  // it just calls the real thing from here instead of relying on the user
+  // to go click it themselves. refreshNetworkAccessGate's poll (already
+  // running every 3s) picks up the result and updates this button/the
+  // gate note once it lands, same as it would for any other change made
+  // to that setting from anywhere. ──
+  if (enableFeedbackLanBtn) {
+    enableFeedbackLanBtn.addEventListener('click', () => {
+      const bridge = window.parent && window.parent.feedBackDesktop && window.parent.feedBackDesktop.network;
+      if (!bridge || typeof bridge.setLanAccess !== 'function') {
+        if (enableFeedbackLanNote) enableFeedbackLanNote.textContent = 'Could not change automatically — open Plugin Manager from FeedBack\'s nav instead.';
+        return;
+      }
+      // The button's CURRENT text is the source of truth for which
+      // direction to go — 'Disable' means it's currently on (so this
+      // click turns it off), 'Enable' means it's currently off.
+      const turningOn = enableFeedbackLanBtn.textContent !== 'Disable';
+      enableFeedbackLanBtn.disabled = true;
+      if (enableFeedbackLanNote) {
+        enableFeedbackLanNote.textContent = (turningOn ? 'Enabling…' : 'Disabling…') + ' (FeedBack restarts its server to apply this)';
+      }
+      bridge.setLanAccess(turningOn).then(() => {
+        if (enableFeedbackLanNote) enableFeedbackLanNote.textContent = '';
+        refreshNetworkAccessGate();
+      }).catch((e) => {
+        enableFeedbackLanBtn.disabled = false;
+        if (enableFeedbackLanNote) enableFeedbackLanNote.textContent = 'Failed: ' + (e && e.message ? e.message : e);
+      });
+    });
+  }
+  // ── Advanced tab: "View Network Settings" — the manual fallback next to
+  // the Enable button above, for anyone who wants to see FeedBack's own
+  // Plugin Manager screen directly (the LAN URLs it lists, or just to
+  // confirm the toggle's real state there) rather than relying solely on
+  // the one-click Enable button. window.showScreen — the host's own
+  // navigation function, called the exact same way by
+  // capability_inspector/settings.html in the host source (static/js/
+  // session.js's showScreen, exposed as window.showScreen) — lives one
+  // level up on window.parent, not on this frame's own window, since this
+  // editor is always loaded inside screen.html's iframe. Same-origin
+  // (both served by this same local server), so window.parent is
+  // reachable with no cross-origin issue. Screen ids are
+  // `plugin-<manifest id>` (plugin-loader.js); Plugin Manager's manifest
+  // id is "plugin_manager". ──
+  const openPluginManagerBtn = document.getElementById('openPluginManagerBtn');
+  if (openPluginManagerBtn) {
+    openPluginManagerBtn.addEventListener('click', () => {
+      try {
+        if (window.parent && typeof window.parent.showScreen === 'function') {
+          window.parent.showScreen('plugin-plugin_manager');
+        } else if (enableFeedbackLanNote) {
+          enableFeedbackLanNote.textContent = 'Could not navigate automatically — open Plugin Manager from FeedBack\'s nav.';
+        }
+      } catch (e) {
+        if (enableFeedbackLanNote) enableFeedbackLanNote.textContent = 'Could not navigate automatically — open Plugin Manager from FeedBack\'s nav.';
+      }
+    });
+  }
   // ── status badge (created here, not in the HTML template, to keep the
   // diff against the standalone tool to this one appended block) ──
   const badge = document.createElement('div');
@@ -8142,13 +9325,22 @@
     clearTimeout(badgeHideTimer);
     badgeHideTimer = setTimeout(() => { badge.style.opacity = '0'; }, 1500);
   }
-  // ── load whatever's actually saved, overriding the built-in Standard
-  // preset the boot sequence above just rendered ──
-  fetch(LAYOUT_URL).then((r) => (r.ok ? r.json() : null)).then((data) => {
-    if (data && data.elements) {
-      try { importState(data); } catch (e) { console.warn('Marquee editor: failed to load saved layout', e); }
-    }
-  }).catch((e) => console.warn('Marquee editor: could not reach plugin backend', e));
+  // ── load saved preset preferences (custom presets + hidden built-ins)
+  // FIRST, then whatever's actually saved, overriding the built-in
+  // Standard preset the boot sequence above just rendered. Order matters:
+  // importState's presetName-sync (below) only moves #presetSelect onto a
+  // custom preset's <option> if that option already exists, which
+  // applyPresetPrefs is what creates. ──
+  fetch(PRESET_PREFS_URL).then((r) => (r.ok ? r.json() : null)).then((prefs) => {
+    applyPresetPrefs(prefs);
+  }).catch((e) => console.warn('Marquee editor: could not load saved preset preferences', e)).then(() => {
+    updateDeletePresetBtnState();
+    return fetch(LAYOUT_URL).then((r) => (r.ok ? r.json() : null)).then((data) => {
+      if (data && data.elements) {
+        try { importState(data); } catch (e) { console.warn('Marquee editor: failed to load saved layout', e); }
+      }
+    }).catch((e) => console.warn('Marquee editor: could not reach plugin backend', e));
+  });
   // ── save on the same cadence the tool already uses to autosave preset
   // edits into memory (AUTOSAVE_INTERVAL_MS, defined earlier in this file)
   // — this just adds "and also POST it" to that existing rhythm. Only

@@ -122,7 +122,7 @@
   // saturated color in the whole ramp — a perfect score should be the
   // single most eye-catching point on the scale, not a dim afterthought.
   const SCORE_COLOR_STOPS = [
-    { pct: 0, hex: '#e5484d' },   // bright red
+    { pct: 0, hex: '#ff0000' },   // pure red
     { pct: 60, hex: '#b4a014' },  // dark yellow, rgb(180,160,20)
     { pct: 85, hex: '#ffff00' },  // bright yellow, rgb(255,255,0)
     { pct: 100, hex: '#00ff00' }, // pure green
@@ -1011,6 +1011,13 @@
       MarqueeCore._bulbLoopResizeObserver.observe(el);
     } else {
       MarqueeCore._bulbLoopResizeObserver.unobserve(el);
+      // setBulbLoop's own dots (direct .marquee-bulb-dot children) are
+      // otherwise left behind in the DOM every time bulbs get toggled
+      // off — invisible (only .marquee-bulbs-active makes them render),
+      // so harmless to a viewer, but they'd otherwise just accumulate
+      // silently across repeated on/off toggles instead of actually
+      // being cleaned up.
+      el.querySelectorAll(':scope > .marquee-bulb-dot').forEach((dot) => dot.remove());
     }
     el.classList.toggle('marquee-bulbs-active', !!enabled);
   };
@@ -1357,11 +1364,17 @@
     const COLORS = [accent, '#ffd37a', '#f3e9d8', '#ff3b6b', '#3ba1ff', '#2ee87d', '#c65bff', '#ffe63b', '#ff7a1a', '#00e5ff', '#ff5cc0'];
 
     function currentDurationMs() {
-      return clamp(visuals.confettiDuration, 1, 20) * 1000;
+      // Falls back to Standard's own default (7s) rather than passing
+      // undefined straight to clamp() — Math.max(1, undefined) is NaN,
+      // which would make every "elapsed < durationMs" check false
+      // forever: confetti stays enabled but silently never spawns
+      // anything, no error, no visible sign why.
+      const d = typeof visuals.confettiDuration === 'number' ? visuals.confettiDuration : 7;
+      return clamp(d, 1, 20) * 1000;
     }
     const MIN_RATE_PER_SEC = 20;
     const MAX_RATE_PER_SEC = 1200;
-    const volume = clamp(visuals.confettiVolume, 0, 1);
+    const volume = clamp(typeof visuals.confettiVolume === 'number' ? visuals.confettiVolume : 0.5, 0, 1);
     const ratePerSec = MIN_RATE_PER_SEC + volume * (MAX_RATE_PER_SEC - MIN_RATE_PER_SEC);
     const GRAVITY = 0.02;
     const ANGLE_SPREAD_DEG = 25;
