@@ -3,6 +3,8 @@
 A now-playing overlay plugin for [FeedBack](https://github.com/got-feedBack/feedBack-desktop), designed as an OBS Browser Source. Shows album art, song title/artist, tuning, year, arrangement, live score, and song progress, staying in sync in real time as you play — fully positioned and styled through an in-app visual editor, no CSS editing required.
 
 ![Marquee editor](marquee/screenshots/editor-global-the-marquee.png)
+![Live OBS output](marquee/screenshots/render-output-standard.png)
+![Crafty Girls preset](marquee/screenshots/editor-global-crafty-girls.png)
 
 ## Download
 
